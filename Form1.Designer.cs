@@ -42,24 +42,18 @@
             label2 = new Label();
             label1 = new Label();
             tabContacts = new TabPage();
-            btnSyncVendors = new Button();
-            btnSyncCustomers = new Button();
-            listViewContacts = new ListView();
-            tabInvoices = new TabPage();
-            btnSyncSalesInvoices = new Button();
-            btnSyncPurchaseInvoices = new Button();
-            listViewInvoices = new ListView();
+            btnSync = new Button();
+            txtDebugConsole = new TextBox();
+            lblDebugConsole = new Label();
             tabControl1.SuspendLayout();
             tabSettings.SuspendLayout();
             tabContacts.SuspendLayout();
-            tabInvoices.SuspendLayout();
             SuspendLayout();
             // 
             // tabControl1
             // 
             tabControl1.Controls.Add(tabSettings);
             tabControl1.Controls.Add(tabContacts);
-            tabControl1.Controls.Add(tabInvoices);
             tabControl1.Dock = DockStyle.Fill;
             tabControl1.Location = new Point(0, 0);
             tabControl1.Name = "tabControl1";
@@ -182,9 +176,9 @@
             // 
             // tabContacts
             // 
-            tabContacts.Controls.Add(btnSyncVendors);
-            tabContacts.Controls.Add(btnSyncCustomers);
-            tabContacts.Controls.Add(listViewContacts);
+            tabContacts.Controls.Add(btnSync);
+            tabContacts.Controls.Add(txtDebugConsole);
+            tabContacts.Controls.Add(lblDebugConsole);
             tabContacts.Location = new Point(4, 24);
             tabContacts.Name = "tabContacts";
             tabContacts.Padding = new Padding(3);
@@ -193,73 +187,35 @@
             tabContacts.Text = "Contacts";
             tabContacts.UseVisualStyleBackColor = true;
             // 
-            // btnSyncVendors
+            // btnSync
             // 
-            btnSyncVendors.Location = new Point(120, 20);
-            btnSyncVendors.Name = "btnSyncVendors";
-            btnSyncVendors.Size = new Size(94, 29);
-            btnSyncVendors.TabIndex = 2;
-            btnSyncVendors.Text = "Sync Vendors";
-            btnSyncVendors.UseVisualStyleBackColor = true;
+            btnSync.Location = new Point(20, 20);
+            btnSync.Name = "btnSync";
+            btnSync.Size = new Size(120, 29);
+            btnSync.TabIndex = 1;
+            btnSync.Text = "Sync Contacts";
+            btnSync.UseVisualStyleBackColor = true;
             // 
-            // btnSyncCustomers
+            // lblDebugConsole
             // 
-            btnSyncCustomers.Location = new Point(20, 20);
-            btnSyncCustomers.Name = "btnSyncCustomers";
-            btnSyncCustomers.Size = new Size(94, 29);
-            btnSyncCustomers.TabIndex = 1;
-            btnSyncCustomers.Text = "Sync Customers";
-            btnSyncCustomers.UseVisualStyleBackColor = true;
+            lblDebugConsole.AutoSize = true;
+            lblDebugConsole.Location = new Point(20, 60);
+            lblDebugConsole.Name = "lblDebugConsole";
+            lblDebugConsole.Size = new Size(90, 15);
+            lblDebugConsole.TabIndex = 2;
+            lblDebugConsole.Text = "Debug Console:";
             // 
-            // listViewContacts
+            // txtDebugConsole
             // 
-            listViewContacts.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewContacts.Location = new Point(20, 60);
-            listViewContacts.Name = "listViewContacts";
-            listViewContacts.Size = new Size(752, 342);
-            listViewContacts.TabIndex = 0;
-            listViewContacts.UseCompatibleStateImageBehavior = false;
-            listViewContacts.View = View.Details;
-            // 
-            // tabInvoices
-            // 
-            tabInvoices.Controls.Add(btnSyncSalesInvoices);
-            tabInvoices.Controls.Add(btnSyncPurchaseInvoices);
-            tabInvoices.Controls.Add(listViewInvoices);
-            tabInvoices.Location = new Point(4, 24);
-            tabInvoices.Name = "tabInvoices";
-            tabInvoices.Size = new Size(792, 422);
-            tabInvoices.TabIndex = 2;
-            tabInvoices.Text = "Invoices";
-            tabInvoices.UseVisualStyleBackColor = true;
-            // 
-            // btnSyncSalesInvoices
-            // 
-            btnSyncSalesInvoices.Location = new Point(120, 20);
-            btnSyncSalesInvoices.Name = "btnSyncSalesInvoices";
-            btnSyncSalesInvoices.Size = new Size(120, 29);
-            btnSyncSalesInvoices.TabIndex = 2;
-            btnSyncSalesInvoices.Text = "Sync Sales Invoices";
-            btnSyncSalesInvoices.UseVisualStyleBackColor = true;
-            // 
-            // btnSyncPurchaseInvoices
-            // 
-            btnSyncPurchaseInvoices.Location = new Point(20, 20);
-            btnSyncPurchaseInvoices.Name = "btnSyncPurchaseInvoices";
-            btnSyncPurchaseInvoices.Size = new Size(94, 29);
-            btnSyncPurchaseInvoices.TabIndex = 1;
-            btnSyncPurchaseInvoices.Text = "Sync Purchase Invoices";
-            btnSyncPurchaseInvoices.UseVisualStyleBackColor = true;
-            // 
-            // listViewInvoices
-            // 
-            listViewInvoices.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewInvoices.Location = new Point(20, 60);
-            listViewInvoices.Name = "listViewInvoices";
-            listViewInvoices.Size = new Size(752, 342);
-            listViewInvoices.TabIndex = 0;
-            listViewInvoices.UseCompatibleStateImageBehavior = false;
-            listViewInvoices.View = View.Details;
+            txtDebugConsole.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            txtDebugConsole.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            txtDebugConsole.Location = new Point(20, 80);
+            txtDebugConsole.Multiline = true;
+            txtDebugConsole.Name = "txtDebugConsole";
+            txtDebugConsole.ReadOnly = true;
+            txtDebugConsole.ScrollBars = ScrollBars.Vertical;
+            txtDebugConsole.Size = new Size(750, 320);
+            txtDebugConsole.TabIndex = 3;
             // 
             // Form1
             // 
@@ -273,7 +229,6 @@
             tabSettings.ResumeLayout(false);
             tabSettings.PerformLayout();
             tabContacts.ResumeLayout(false);
-            tabInvoices.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -282,7 +237,6 @@
         private TabControl tabControl1;
         private TabPage tabSettings;
         private TabPage tabContacts;
-        private TabPage tabInvoices;
         private TextBox txtApiKey;
         private TextBox txtPublicKey;
         private TextBox txtApiUrl;
@@ -294,11 +248,8 @@
         private Button btnSaveSettings;
         private Button btnBrowseCompanyFile;
         private Button btnTestConnection;
-        private ListView listViewContacts;
-        private Button btnSyncVendors;
-        private Button btnSyncCustomers;
-        private ListView listViewInvoices;
-        private Button btnSyncSalesInvoices;
-        private Button btnSyncPurchaseInvoices;
+        private Button btnSync;
+        private TextBox txtDebugConsole;
+        private Label lblDebugConsole;
     }
 }

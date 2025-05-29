@@ -6,16 +6,12 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+	  <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Interop.QBFC16" Version="16.0.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="app.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <PackageReference Include="Supabase" Version="1.1.1" />
   </ItemGroup>
 
 </Project>

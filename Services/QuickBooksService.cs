@@ -110,13 +110,50 @@ namespace CarbonQuickBooks.Services
                             var customerRet = customerRetList.GetAt(i);
                             if (customerRet?.FullName?.GetValue() != null)
                             {
-                                customers.Add(new Contact
+                                var customer = new Contact
                                 {
                                     Name = customerRet.FullName.GetValue(),
+                                    CompanyName = customerRet.CompanyName?.GetValue() ?? string.Empty,
                                     Type = "Customer",
                                     Email = customerRet.Email?.GetValue() ?? string.Empty,
                                     Phone = customerRet.Phone?.GetValue() ?? string.Empty
-                                });
+                                };
+
+                                // Get billing address
+                                if (customerRet.BillAddress != null)
+                                {
+                                    customer.BillingAddress = new Address
+                                    {
+                                        Line1 = customerRet.BillAddress.Addr1?.GetValue() ?? string.Empty,
+                                        Line2 = customerRet.BillAddress.Addr2?.GetValue() ?? string.Empty,
+                                        Line3 = customerRet.BillAddress.Addr3?.GetValue() ?? string.Empty,
+                                        Line4 = customerRet.BillAddress.Addr4?.GetValue() ?? string.Empty,
+                                        Line5 = customerRet.BillAddress.Addr5?.GetValue() ?? string.Empty,
+                                        City = customerRet.BillAddress.City?.GetValue() ?? string.Empty,
+                                        State = customerRet.BillAddress.State?.GetValue() ?? string.Empty,
+                                        PostalCode = customerRet.BillAddress.PostalCode?.GetValue() ?? string.Empty,
+                                        Country = customerRet.BillAddress.Country?.GetValue() ?? string.Empty
+                                    };
+                                }
+
+                                // Get shipping address
+                                if (customerRet.ShipAddress != null)
+                                {
+                                    customer.ShippingAddress = new Address
+                                    {
+                                        Line1 = customerRet.ShipAddress.Addr1?.GetValue() ?? string.Empty,
+                                        Line2 = customerRet.ShipAddress.Addr2?.GetValue() ?? string.Empty,
+                                        Line3 = customerRet.ShipAddress.Addr3?.GetValue() ?? string.Empty,
+                                        Line4 = customerRet.ShipAddress.Addr4?.GetValue() ?? string.Empty,
+                                        Line5 = customerRet.ShipAddress.Addr5?.GetValue() ?? string.Empty,
+                                        City = customerRet.ShipAddress.City?.GetValue() ?? string.Empty,
+                                        State = customerRet.ShipAddress.State?.GetValue() ?? string.Empty,
+                                        PostalCode = customerRet.ShipAddress.PostalCode?.GetValue() ?? string.Empty,
+                                        Country = customerRet.ShipAddress.Country?.GetValue() ?? string.Empty
+                                    };
+                                }
+
+                                customers.Add(customer);
                             }
                         }
                     }
@@ -153,13 +190,50 @@ namespace CarbonQuickBooks.Services
                             var vendorRet = vendorRetList.GetAt(i);
                             if (vendorRet?.Name?.GetValue() != null)
                             {
-                                vendors.Add(new Contact
+                                var vendor = new Contact
                                 {
                                     Name = vendorRet.Name.GetValue(),
+                                    CompanyName = vendorRet.CompanyName?.GetValue() ?? string.Empty,
                                     Type = "Vendor",
                                     Email = vendorRet.Email?.GetValue() ?? string.Empty,
                                     Phone = vendorRet.Phone?.GetValue() ?? string.Empty
-                                });
+                                };
+
+                                // Get billing address
+                                if (vendorRet.VendorAddress != null)
+                                {
+                                    vendor.BillingAddress = new Address
+                                    {
+                                        Line1 = vendorRet.VendorAddress.Addr1?.GetValue() ?? string.Empty,
+                                        Line2 = vendorRet.VendorAddress.Addr2?.GetValue() ?? string.Empty,
+                                        Line3 = vendorRet.VendorAddress.Addr3?.GetValue() ?? string.Empty,
+                                        Line4 = vendorRet.VendorAddress.Addr4?.GetValue() ?? string.Empty,
+                                        Line5 = vendorRet.VendorAddress.Addr5?.GetValue() ?? string.Empty,
+                                        City = vendorRet.VendorAddress.City?.GetValue() ?? string.Empty,
+                                        State = vendorRet.VendorAddress.State?.GetValue() ?? string.Empty,
+                                        PostalCode = vendorRet.VendorAddress.PostalCode?.GetValue() ?? string.Empty,
+                                        Country = vendorRet.VendorAddress.Country?.GetValue() ?? string.Empty
+                                    };
+                                }
+
+                                // Get shipping address
+                                if (vendorRet.ShipAddress != null)
+                                {
+                                    vendor.ShippingAddress = new Address
+                                    {
+                                        Line1 = vendorRet.ShipAddress.Addr1?.GetValue() ?? string.Empty,
+                                        Line2 = vendorRet.ShipAddress.Addr2?.GetValue() ?? string.Empty,
+                                        Line3 = vendorRet.ShipAddress.Addr3?.GetValue() ?? string.Empty,
+                                        Line4 = vendorRet.ShipAddress.Addr4?.GetValue() ?? string.Empty,
+                                        Line5 = vendorRet.ShipAddress.Addr5?.GetValue() ?? string.Empty,
+                                        City = vendorRet.ShipAddress.City?.GetValue() ?? string.Empty,
+                                        State = vendorRet.ShipAddress.State?.GetValue() ?? string.Empty,
+                                        PostalCode = vendorRet.ShipAddress.PostalCode?.GetValue() ?? string.Empty,
+                                        Country = vendorRet.ShipAddress.Country?.GetValue() ?? string.Empty
+                                    };
+                                }
+
+                                vendors.Add(vendor);
                             }
                         }
                     }

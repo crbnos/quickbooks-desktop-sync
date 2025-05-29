@@ -14,12 +14,14 @@ namespace CarbonQuickBooks
             InitializeComponent();
             _config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
             LoadSettings();
-            InitializeListViews();
+            
+            WriteToDebugConsole("QuickBooks Sync application started. Ready for logging...\n");
             
             // Wire up event handlers
             btnBrowseCompanyFile.Click += BtnBrowseCompanyFile_Click;
             btnTestConnection.Click += BtnTestConnection_Click;
             btnSaveSettings.Click += BtnSaveSettings_Click;
+            btnSync.Click += BtnSync_Click;
         }
 
         private void LoadSettings()
@@ -71,30 +73,9 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void BtnSaveSettings_Click(object sender, EventArgs e)
+        private void BtnSaveSettings_Click(object? sender, EventArgs e)
         {
             SaveSettings();
-        }
-
-        private void InitializeListViews()
-        {
-            // Initialize Contacts ListView
-            listViewContacts.Columns.Add("Name", 200);
-            listViewContacts.Columns.Add("Type", 100);
-            listViewContacts.Columns.Add("Email", 200);
-            listViewContacts.Columns.Add("Phone", 150);
-            listViewContacts.FullRowSelect = true;
-            listViewContacts.GridLines = true;
-
-            // Initialize Invoices ListView
-            listViewInvoices.Columns.Add("Invoice Number", 120);
-            listViewInvoices.Columns.Add("Date", 100);
-            listViewInvoices.Columns.Add("Type", 100);
-            listViewInvoices.Columns.Add("Contact Name", 200);
-            listViewInvoices.Columns.Add("Amount", 120);
-            listViewInvoices.Columns.Add("Status", 100);
-            listViewInvoices.FullRowSelect = true;
-            listViewInvoices.GridLines = true;
         }
 
         private void InitializeQBService()
@@ -107,72 +88,137 @@ namespace CarbonQuickBooks
             _qbService = new QuickBooksService(companyFile);
         }
 
-        private void BtnSyncCustomers_Click(object sender, EventArgs e)
+        private void WriteToDebugConsole(string message)
+        {
+            if (txtDebugConsole.InvokeRequired)
+            {
+                txtDebugConsole.Invoke(new Action(() => WriteToDebugConsole(message)));
+                return;
+            }
+            
+            txtDebugConsole.AppendText(message + Environment.NewLine);
+            txtDebugConsole.SelectionStart = txtDebugConsole.Text.Length;
+            txtDebugConsole.ScrollToCaret();
+        }
+
+        private void BtnSync_Click(object? sender, EventArgs e)
         {
             try
             {
                 InitializeQBService();
-                listViewContacts.Items.Clear();
                 Cursor = Cursors.WaitCursor;
 
+                WriteToDebugConsole("=== Starting QuickBooks Sync ===");
+                
+                // Sync both customers and vendors
                 var customers = _qbService?.GetCustomers();
+                var vendors = _qbService?.GetVendors();
+
+                int customerCount = customers?.Count ?? 0;
+                int vendorCount = vendors?.Count ?? 0;
+
+                WriteToDebugConsole($"\n--- Customers Found: {customerCount} ---");
                 if (customers != null)
                 {
                     foreach (var customer in customers)
                     {
-                        var item = new ListViewItem(new[]
+                        WriteToDebugConsole($"Customer: {customer.Name}");
+                        WriteToDebugConsole($"  Company: {customer.CompanyName ?? "N/A"}");
+                        WriteToDebugConsole($"  Type: {customer.Type}");
+                        WriteToDebugConsole($"  Email: {customer.Email ?? "N/A"}");
+                        WriteToDebugConsole($"  Phone: {customer.Phone ?? "N/A"}");
+                        
+                        // Display billing address
+                        if (customer.BillingAddress != null)
                         {
-                            customer.Name,
-                            customer.Type,
-                            customer.Email,
-                            customer.Phone
-                        });
-                        listViewContacts.Items.Add(item);
+                            WriteToDebugConsole($"  Billing Address:");
+                            var billingLines = customer.BillingAddress.ToString().Split('\n');
+                            foreach (var line in billingLines)
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                    WriteToDebugConsole($"    {line.Trim()}");
+                            }
+                        }
+                        else
+                        {
+                            WriteToDebugConsole($"  Billing Address: N/A");
+                        }
+                        
+                        // Display shipping address
+                        if (customer.ShippingAddress != null)
+                        {
+                            WriteToDebugConsole($"  Shipping Address:");
+                            var shippingLines = customer.ShippingAddress.ToString().Split('\n');
+                            foreach (var line in shippingLines)
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                    WriteToDebugConsole($"    {line.Trim()}");
+                            }
+                        }
+                        else
+                        {
+                            WriteToDebugConsole($"  Shipping Address: N/A");
+                        }
+                        
+                        WriteToDebugConsole("  ---");
                     }
                 }
 
-                MessageBox.Show("Customer sync completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error syncing customers: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                Cursor = Cursors.Default;
-                _qbService?.Dispose();
-            }
-        }
-
-        private void BtnSyncVendors_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                InitializeQBService();
-                listViewContacts.Items.Clear();
-                Cursor = Cursors.WaitCursor;
-
-                var vendors = _qbService?.GetVendors();
+                WriteToDebugConsole($"\n--- Vendors Found: {vendorCount} ---");
                 if (vendors != null)
                 {
                     foreach (var vendor in vendors)
                     {
-                        var item = new ListViewItem(new[]
+                        WriteToDebugConsole($"Vendor: {vendor.Name}");
+                        WriteToDebugConsole($"  Company: {vendor.CompanyName ?? "N/A"}");
+                        WriteToDebugConsole($"  Type: {vendor.Type}");
+                        WriteToDebugConsole($"  Email: {vendor.Email ?? "N/A"}");
+                        WriteToDebugConsole($"  Phone: {vendor.Phone ?? "N/A"}");
+                        
+                        // Display billing address
+                        if (vendor.BillingAddress != null)
                         {
-                            vendor.Name,
-                            vendor.Type,
-                            vendor.Email,
-                            vendor.Phone
-                        });
-                        listViewContacts.Items.Add(item);
+                            WriteToDebugConsole($"  Billing Address:");
+                            var billingLines = vendor.BillingAddress.ToString().Split('\n');
+                            foreach (var line in billingLines)
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                    WriteToDebugConsole($"    {line.Trim()}");
+                            }
+                        }
+                        else
+                        {
+                            WriteToDebugConsole($"  Billing Address: N/A");
+                        }
+                        
+                        // Display shipping address
+                        if (vendor.ShippingAddress != null)
+                        {
+                            WriteToDebugConsole($"  Shipping Address:");
+                            var shippingLines = vendor.ShippingAddress.ToString().Split('\n');
+                            foreach (var line in shippingLines)
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                    WriteToDebugConsole($"    {line.Trim()}");
+                            }
+                        }
+                        else
+                        {
+                            WriteToDebugConsole($"  Shipping Address: N/A");
+                        }
+                        
+                        WriteToDebugConsole("  ---");
                     }
                 }
+                WriteToDebugConsole("=== Sync Complete ===\n");
 
-                MessageBox.Show("Vendor sync completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"Sync completed successfully!\nCustomers: {customerCount}\nVendors: {vendorCount}\n\nContact details logged to debug console.", 
+                    "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error syncing vendors: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                WriteToDebugConsole($"ERROR during sync: {ex.Message}");
+                MessageBox.Show($"Error during sync: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -181,56 +227,7 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void BtnSyncPurchaseInvoices_Click(object sender, EventArgs e)
-        {
-            SyncInvoices(false);
-        }
-
-        private void BtnSyncSalesInvoices_Click(object sender, EventArgs e)
-        {
-            SyncInvoices(true);
-        }
-
-        private void SyncInvoices(bool salesInvoices)
-        {
-            try
-            {
-                InitializeQBService();
-                listViewInvoices.Items.Clear();
-                Cursor = Cursors.WaitCursor;
-
-                var invoices = _qbService?.GetInvoices(salesInvoices);
-                if (invoices != null)
-                {
-                    foreach (var invoice in invoices)
-                    {
-                        var item = new ListViewItem(new[]
-                        {
-                            invoice.InvoiceNumber,
-                            invoice.Date.ToShortDateString(),
-                            invoice.Type,
-                            invoice.ContactName,
-                            invoice.Amount.ToString("C"),
-                            invoice.Status
-                        });
-                        listViewInvoices.Items.Add(item);
-                    }
-                }
-
-                MessageBox.Show($"{(salesInvoices ? "Sales" : "Purchase")} invoice sync completed successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error syncing invoices: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                Cursor = Cursors.Default;
-                _qbService?.Dispose();
-            }
-        }
-
-        private void BtnBrowseCompanyFile_Click(object sender, EventArgs e)
+        private void BtnBrowseCompanyFile_Click(object? sender, EventArgs e)
         {
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
             {
@@ -245,7 +242,7 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void BtnTestConnection_Click(object sender, EventArgs e)
+        private void BtnTestConnection_Click(object? sender, EventArgs e)
         {
             try
             {
