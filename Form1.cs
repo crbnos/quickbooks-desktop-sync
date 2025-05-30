@@ -1,6 +1,9 @@
 using CarbonQuickBooks.Models;
 using CarbonQuickBooks.Services;
 using System.Configuration;
+using Microsoft.Extensions.Configuration;
+using IConfig = Microsoft.Extensions.Configuration.IConfiguration;
+using ConfigManager = System.Configuration.ConfigurationManager;
 
 namespace CarbonQuickBooks
 {
@@ -8,12 +11,14 @@ namespace CarbonQuickBooks
     {
         private readonly Configuration _config;
         private QuickBooksService? _qbService;
+        private CarbonService? _carbonService;
 
         public Form1()
         {
             InitializeComponent();
-            _config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+            _config = ConfigManager.OpenExeConfiguration(ConfigurationUserLevel.None);
             LoadSettings();
+            InitializeCarbonServiceAsync().ConfigureAwait(false);
             
             WriteToDebugConsole("QuickBooks Sync application started. Ready for logging...\n");
             
@@ -22,6 +27,65 @@ namespace CarbonQuickBooks
             btnTestConnection.Click += BtnTestConnection_Click;
             btnSaveSettings.Click += BtnSaveSettings_Click;
             btnSync.Click += BtnSync_Click;
+            btnSyncInvoices.Click += BtnSyncInvoices_Click;
+
+            // Add text changed handlers for Carbon settings
+            txtApiUrl.TextChanged += CarbonSettings_TextChanged;
+            txtPublicKey.TextChanged += CarbonSettings_TextChanged;
+            txtApiKey.TextChanged += CarbonSettings_TextChanged;
+            txtPurchaseAccount.TextChanged += CarbonSettings_TextChanged;
+            txtSalesRevenueAccount.TextChanged += CarbonSettings_TextChanged;
+            txtCompanyFile.TextChanged += CarbonSettings_TextChanged;
+
+            // Initial validation of settings
+            ValidateSettings();
+        }
+
+        private void ValidateSettings()
+        {
+            bool isValid = !string.IsNullOrWhiteSpace(txtCompanyFile.Text) &&
+                          !string.IsNullOrWhiteSpace(txtApiUrl.Text) &&
+                          !string.IsNullOrWhiteSpace(txtPublicKey.Text) &&
+                          !string.IsNullOrWhiteSpace(txtApiKey.Text) &&
+                          !string.IsNullOrWhiteSpace(txtPurchaseAccount.Text) &&
+                          !string.IsNullOrWhiteSpace(txtSalesRevenueAccount.Text);
+
+            btnSyncInvoices.Enabled = isValid;
+            btnSync.Enabled = isValid;  // btnSync is the contacts sync button
+        }
+
+        private async Task InitializeCarbonServiceAsync()
+        {
+            try
+            {
+                var carbonConfig = new Dictionary<string, string?>
+                {
+                    { "Supabase:Url", txtApiUrl.Text },
+                    { "Supabase:Key", txtPublicKey.Text },
+                    { "Supabase:ApiKey", txtApiKey.Text }
+                };
+
+                var configuration = new ConfigurationBuilder()
+                    .AddInMemoryCollection(carbonConfig)
+                    .Build();
+
+                _carbonService = await CarbonService.CreateAsync(configuration);
+                WriteToDebugConsole("Carbon service initialized successfully.");
+            }
+            catch (Exception ex)
+            {
+                WriteToDebugConsole($"Error initializing Carbon service: {ex.Message}");
+            }
+        }
+
+        private async void CarbonSettings_TextChanged(object? sender, EventArgs e)
+        {
+            ValidateSettings();
+            if (_carbonService != null)
+            {
+                await InitializeCarbonServiceAsync();
+                WriteToDebugConsole("Carbon configuration updated.");
+            }
         }
 
         private void LoadSettings()
@@ -32,6 +96,8 @@ namespace CarbonQuickBooks
                 txtApiUrl.Text = _config.AppSettings.Settings["ApiUrl"]?.Value ?? string.Empty;
                 txtPublicKey.Text = _config.AppSettings.Settings["PublicKey"]?.Value ?? string.Empty;
                 txtApiKey.Text = _config.AppSettings.Settings["ApiKey"]?.Value ?? string.Empty;
+                txtPurchaseAccount.Text = _config.AppSettings.Settings["PurchaseAccount"]?.Value ?? string.Empty;
+                txtSalesRevenueAccount.Text = _config.AppSettings.Settings["SalesRevenueAccount"]?.Value ?? string.Empty;
             }
             catch (ConfigurationErrorsException ex)
             {
@@ -48,10 +114,19 @@ namespace CarbonQuickBooks
                 UpdateOrAddSetting("ApiUrl", txtApiUrl.Text);
                 UpdateOrAddSetting("PublicKey", txtPublicKey.Text);
                 UpdateOrAddSetting("ApiKey", txtApiKey.Text);
+                UpdateOrAddSetting("PurchaseAccount", txtPurchaseAccount.Text);
+                UpdateOrAddSetting("SalesRevenueAccount", txtSalesRevenueAccount.Text);
 
                 // Save the configuration
                 _config.Save(ConfigurationSaveMode.Modified);
-                ConfigurationManager.RefreshSection("appSettings");
+                ConfigManager.RefreshSection("appSettings");
+
+                // Update Carbon service with new settings
+                InitializeCarbonServiceAsync().ConfigureAwait(false);
+                if (_carbonService != null)
+                {
+                    _carbonService.UpdateConfiguration();
+                }
 
                 MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -78,14 +153,28 @@ namespace CarbonQuickBooks
             SaveSettings();
         }
 
-        private void InitializeQBService()
+        private async Task InitializeServicesAsync()
         {
             string companyFile = txtCompanyFile.Text;
             if (string.IsNullOrEmpty(companyFile))
             {
                 throw new Exception("Company file path is not set. Please configure it in the Settings tab.");
             }
-            _qbService = new QuickBooksService(companyFile);
+            // _qbService = new QuickBooksService(companyFile);
+
+            // Create a new configuration for Carbon service
+            var carbonConfig = new Dictionary<string, string?>
+            {
+                { "Supabase:Url", txtApiUrl.Text },
+                { "Supabase:Key", txtPublicKey.Text },
+                { "Supabase:ApiKey", txtApiKey.Text }
+            };
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(carbonConfig)
+                .Build();
+
+            _carbonService = await CarbonService.CreateAsync(configuration);
         }
 
         private void WriteToDebugConsole(string message)
@@ -101,119 +190,37 @@ namespace CarbonQuickBooks
             txtDebugConsole.ScrollToCaret();
         }
 
-        private void BtnSync_Click(object? sender, EventArgs e)
+        private async void BtnSync_Click(object? sender, EventArgs e)
         {
             try
             {
-                InitializeQBService();
+                await InitializeServicesAsync();
                 Cursor = Cursors.WaitCursor;
 
                 WriteToDebugConsole("=== Starting QuickBooks Sync ===");
                 
-                // Sync both customers and vendors
-                var customers = _qbService?.GetCustomers();
-                var vendors = _qbService?.GetVendors();
-
-                int customerCount = customers?.Count ?? 0;
-                int vendorCount = vendors?.Count ?? 0;
-
-                WriteToDebugConsole($"\n--- Customers Found: {customerCount} ---");
-                if (customers != null)
+                // Get and display Carbon customers
+                WriteToDebugConsole("\n=== Carbon Data ===");
+                if (_carbonService != null)
                 {
-                    foreach (var customer in customers)
+                    var carbonCustomers = await _carbonService.GetCustomers();
+                    WriteToDebugConsole($"\n--- Carbon Customers Found: {carbonCustomers.Count} ---");
+                    foreach (var customer in carbonCustomers)
                     {
                         WriteToDebugConsole($"Customer: {customer.Name}");
-                        WriteToDebugConsole($"  Company: {customer.CompanyName ?? "N/A"}");
-                        WriteToDebugConsole($"  Type: {customer.Type}");
-                        WriteToDebugConsole($"  Email: {customer.Email ?? "N/A"}");
-                        WriteToDebugConsole($"  Phone: {customer.Phone ?? "N/A"}");
-                        
-                        // Display billing address
-                        if (customer.BillingAddress != null)
-                        {
-                            WriteToDebugConsole($"  Billing Address:");
-                            var billingLines = customer.BillingAddress.ToString().Split('\n');
-                            foreach (var line in billingLines)
-                            {
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    WriteToDebugConsole($"    {line.Trim()}");
-                            }
-                        }
-                        else
-                        {
-                            WriteToDebugConsole($"  Billing Address: N/A");
-                        }
-                        
-                        // Display shipping address
-                        if (customer.ShippingAddress != null)
-                        {
-                            WriteToDebugConsole($"  Shipping Address:");
-                            var shippingLines = customer.ShippingAddress.ToString().Split('\n');
-                            foreach (var line in shippingLines)
-                            {
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    WriteToDebugConsole($"    {line.Trim()}");
-                            }
-                        }
-                        else
-                        {
-                            WriteToDebugConsole($"  Shipping Address: N/A");
-                        }
-                        
                         WriteToDebugConsole("  ---");
                     }
-                }
 
-                WriteToDebugConsole($"\n--- Vendors Found: {vendorCount} ---");
-                if (vendors != null)
-                {
-                    foreach (var vendor in vendors)
+                    var carbonSuppliers = await _carbonService.GetSuppliers();
+                    WriteToDebugConsole($"\n--- Carbon Suppliers Found: {carbonSuppliers.Count} ---");
+                    foreach (var supplier in carbonSuppliers)
                     {
-                        WriteToDebugConsole($"Vendor: {vendor.Name}");
-                        WriteToDebugConsole($"  Company: {vendor.CompanyName ?? "N/A"}");
-                        WriteToDebugConsole($"  Type: {vendor.Type}");
-                        WriteToDebugConsole($"  Email: {vendor.Email ?? "N/A"}");
-                        WriteToDebugConsole($"  Phone: {vendor.Phone ?? "N/A"}");
-                        
-                        // Display billing address
-                        if (vendor.BillingAddress != null)
-                        {
-                            WriteToDebugConsole($"  Billing Address:");
-                            var billingLines = vendor.BillingAddress.ToString().Split('\n');
-                            foreach (var line in billingLines)
-                            {
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    WriteToDebugConsole($"    {line.Trim()}");
-                            }
-                        }
-                        else
-                        {
-                            WriteToDebugConsole($"  Billing Address: N/A");
-                        }
-                        
-                        // Display shipping address
-                        if (vendor.ShippingAddress != null)
-                        {
-                            WriteToDebugConsole($"  Shipping Address:");
-                            var shippingLines = vendor.ShippingAddress.ToString().Split('\n');
-                            foreach (var line in shippingLines)
-                            {
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    WriteToDebugConsole($"    {line.Trim()}");
-                            }
-                        }
-                        else
-                        {
-                            WriteToDebugConsole($"  Shipping Address: N/A");
-                        }
-                        
+                        WriteToDebugConsole($"Supplier: {supplier.Name}");
                         WriteToDebugConsole("  ---");
                     }
                 }
-                WriteToDebugConsole("=== Sync Complete ===\n");
 
-                MessageBox.Show($"Sync completed successfully!\nCustomers: {customerCount}\nVendors: {vendorCount}\n\nContact details logged to debug console.", 
-                    "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                WriteToDebugConsole("=== Sync Complete ===\n");
             }
             catch (Exception ex)
             {
@@ -260,6 +267,35 @@ namespace CarbonQuickBooks
             finally
             {
                 Cursor = Cursors.Default;
+            }
+        }
+
+        private async void BtnSyncInvoices_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                await InitializeServicesAsync();
+                Cursor = Cursors.WaitCursor;
+
+                WriteToDebugConsole("=== Starting QuickBooks Invoice Sync ===");
+                
+                if (_carbonService != null)
+                {
+                    // TODO: Implement invoice sync logic here
+                    WriteToDebugConsole("Invoice sync not yet implemented");
+                }
+
+                WriteToDebugConsole("=== Invoice Sync Complete ===\n");
+            }
+            catch (Exception ex)
+            {
+                WriteToDebugConsole($"ERROR during invoice sync: {ex.Message}");
+                MessageBox.Show($"Error during invoice sync: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+                _qbService?.Dispose();
             }
         }
     }

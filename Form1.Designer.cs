@@ -37,6 +37,10 @@
             txtPublicKey = new TextBox();
             txtApiUrl = new TextBox();
             txtCompanyFile = new TextBox();
+            txtPurchaseAccount = new TextBox();
+            txtSalesRevenueAccount = new TextBox();
+            label6 = new Label();
+            label5 = new Label();
             label4 = new Label();
             label3 = new Label();
             label2 = new Label();
@@ -45,15 +49,21 @@
             btnSync = new Button();
             txtDebugConsole = new TextBox();
             lblDebugConsole = new Label();
+            tabInvoices = new TabPage();
+            btnSyncInvoices = new Button();
+            txtInvoicesDebugConsole = new TextBox();
+            lblInvoicesDebugConsole = new Label();
             tabControl1.SuspendLayout();
             tabSettings.SuspendLayout();
             tabContacts.SuspendLayout();
+            tabInvoices.SuspendLayout();
             SuspendLayout();
             // 
             // tabControl1
             // 
-            tabControl1.Controls.Add(tabSettings);
+            tabControl1.Controls.Add(tabInvoices);
             tabControl1.Controls.Add(tabContacts);
+            tabControl1.Controls.Add(tabSettings);
             tabControl1.Dock = DockStyle.Fill;
             tabControl1.Location = new Point(0, 0);
             tabControl1.Name = "tabControl1";
@@ -70,6 +80,10 @@
             tabSettings.Controls.Add(txtPublicKey);
             tabSettings.Controls.Add(txtApiUrl);
             tabSettings.Controls.Add(txtCompanyFile);
+            tabSettings.Controls.Add(txtPurchaseAccount);
+            tabSettings.Controls.Add(txtSalesRevenueAccount);
+            tabSettings.Controls.Add(label6);
+            tabSettings.Controls.Add(label5);
             tabSettings.Controls.Add(label4);
             tabSettings.Controls.Add(label3);
             tabSettings.Controls.Add(label2);
@@ -84,7 +98,7 @@
             // 
             // btnTestConnection
             // 
-            btnTestConnection.Location = new Point(120, 250);
+            btnTestConnection.Location = new Point(120, 330);
             btnTestConnection.Name = "btnTestConnection";
             btnTestConnection.Size = new Size(120, 29);
             btnTestConnection.TabIndex = 10;
@@ -102,7 +116,7 @@
             // 
             // btnSaveSettings
             // 
-            btnSaveSettings.Location = new Point(20, 250);
+            btnSaveSettings.Location = new Point(20, 330);
             btnSaveSettings.Name = "btnSaveSettings";
             btnSaveSettings.Size = new Size(94, 29);
             btnSaveSettings.TabIndex = 8;
@@ -115,6 +129,7 @@
             txtApiKey.Name = "txtApiKey";
             txtApiKey.Size = new Size(400, 23);
             txtApiKey.TabIndex = 7;
+            txtApiKey.UseSystemPasswordChar = true;
             // 
             // txtPublicKey
             // 
@@ -122,6 +137,7 @@
             txtPublicKey.Name = "txtPublicKey";
             txtPublicKey.Size = new Size(400, 23);
             txtPublicKey.TabIndex = 6;
+            txtPublicKey.UseSystemPasswordChar = true;
             // 
             // txtApiUrl
             // 
@@ -137,6 +153,38 @@
             txtCompanyFile.Size = new Size(400, 23);
             txtCompanyFile.TabIndex = 4;
             txtCompanyFile.ReadOnly = true;
+            // 
+            // txtPurchaseAccount
+            // 
+            txtPurchaseAccount.Location = new Point(20, 250);
+            txtPurchaseAccount.Name = "txtPurchaseAccount";
+            txtPurchaseAccount.Size = new Size(400, 23);
+            txtPurchaseAccount.TabIndex = 11;
+            // 
+            // txtSalesRevenueAccount
+            // 
+            txtSalesRevenueAccount.Location = new Point(20, 300);
+            txtSalesRevenueAccount.Name = "txtSalesRevenueAccount";
+            txtSalesRevenueAccount.Size = new Size(400, 23);
+            txtSalesRevenueAccount.TabIndex = 13;
+            // 
+            // label6
+            // 
+            label6.AutoSize = true;
+            label6.Location = new Point(20, 280);
+            label6.Name = "label6";
+            label6.Size = new Size(127, 15);
+            label6.TabIndex = 14;
+            label6.Text = "Sales Revenue Account:";
+            // 
+            // label5
+            // 
+            label5.AutoSize = true;
+            label5.Location = new Point(20, 230);
+            label5.Name = "label5";
+            label5.Size = new Size(102, 15);
+            label5.TabIndex = 12;
+            label5.Text = "Purchase Expense Account:";
             // 
             // label4
             // 
@@ -217,6 +265,49 @@
             txtDebugConsole.Size = new Size(750, 320);
             txtDebugConsole.TabIndex = 3;
             // 
+            // tabInvoices
+            // 
+            tabInvoices.Controls.Add(btnSyncInvoices);
+            tabInvoices.Controls.Add(txtInvoicesDebugConsole);
+            tabInvoices.Controls.Add(lblInvoicesDebugConsole);
+            tabInvoices.Location = new Point(4, 24);
+            tabInvoices.Name = "tabInvoices";
+            tabInvoices.Padding = new Padding(3);
+            tabInvoices.Size = new Size(792, 422);
+            tabInvoices.TabIndex = 2;
+            tabInvoices.Text = "Invoices";
+            tabInvoices.UseVisualStyleBackColor = true;
+            // 
+            // btnSyncInvoices
+            // 
+            btnSyncInvoices.Location = new Point(20, 20);
+            btnSyncInvoices.Name = "btnSyncInvoices";
+            btnSyncInvoices.Size = new Size(120, 29);
+            btnSyncInvoices.TabIndex = 1;
+            btnSyncInvoices.Text = "Sync Invoices";
+            btnSyncInvoices.UseVisualStyleBackColor = true;
+            // 
+            // lblInvoicesDebugConsole
+            // 
+            lblInvoicesDebugConsole.AutoSize = true;
+            lblInvoicesDebugConsole.Location = new Point(20, 60);
+            lblInvoicesDebugConsole.Name = "lblInvoicesDebugConsole";
+            lblInvoicesDebugConsole.Size = new Size(90, 15);
+            lblInvoicesDebugConsole.TabIndex = 2;
+            lblInvoicesDebugConsole.Text = "Debug Console:";
+            // 
+            // txtInvoicesDebugConsole
+            // 
+            txtInvoicesDebugConsole.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            txtInvoicesDebugConsole.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            txtInvoicesDebugConsole.Location = new Point(20, 80);
+            txtInvoicesDebugConsole.Multiline = true;
+            txtInvoicesDebugConsole.Name = "txtInvoicesDebugConsole";
+            txtInvoicesDebugConsole.ReadOnly = true;
+            txtInvoicesDebugConsole.ScrollBars = ScrollBars.Vertical;
+            txtInvoicesDebugConsole.Size = new Size(750, 320);
+            txtInvoicesDebugConsole.TabIndex = 3;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -229,6 +320,7 @@
             tabSettings.ResumeLayout(false);
             tabSettings.PerformLayout();
             tabContacts.ResumeLayout(false);
+            tabInvoices.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -237,10 +329,15 @@
         private TabControl tabControl1;
         private TabPage tabSettings;
         private TabPage tabContacts;
+        private TabPage tabInvoices;
         private TextBox txtApiKey;
         private TextBox txtPublicKey;
         private TextBox txtApiUrl;
         private TextBox txtCompanyFile;
+        private TextBox txtPurchaseAccount;
+        private TextBox txtSalesRevenueAccount;
+        private Label label6;
+        private Label label5;
         private Label label4;
         private Label label3;
         private Label label2;
@@ -251,5 +348,8 @@
         private Button btnSync;
         private TextBox txtDebugConsole;
         private Label lblDebugConsole;
+        private Button btnSyncInvoices;
+        private TextBox txtInvoicesDebugConsole;
+        private Label lblInvoicesDebugConsole;
     }
 }

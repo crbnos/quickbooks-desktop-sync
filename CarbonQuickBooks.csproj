@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Interop.QBFC16" Version="16.0.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.5" />
     <PackageReference Include="Supabase" Version="1.1.1" />
   </ItemGroup>
 
