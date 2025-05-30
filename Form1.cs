@@ -9,24 +9,22 @@ namespace CarbonQuickBooks
 {
     public partial class Form1 : Form
     {
-        private readonly Configuration _config;
+        private readonly Configuration _config = ConfigManager.OpenExeConfiguration(ConfigurationUserLevel.None);
         private QuickBooksService? _qbService;
         private CarbonService? _carbonService;
 
-        public Form1()
+        public async Task InitializeAsync()
         {
-            InitializeComponent();
-            _config = ConfigManager.OpenExeConfiguration(ConfigurationUserLevel.None);
             LoadSettings();
-            InitializeCarbonServiceAsync().ConfigureAwait(false);
-            
-            WriteToDebugConsole("QuickBooks Sync application started. Ready for logging...\n");
+            await InitializeCarbonServiceAsync().ConfigureAwait(false);
+            WriteToContactsDebugConsole("Ready for logging...\n");
+            WriteToInvoiceDebugConsole("Ready for logging...\n");
             
             // Wire up event handlers
             btnBrowseCompanyFile.Click += BtnBrowseCompanyFile_Click;
             btnTestConnection.Click += BtnTestConnection_Click;
             btnSaveSettings.Click += BtnSaveSettings_Click;
-            btnSync.Click += BtnSync_Click;
+            btnSyncContacts.Click += BtnSyncContacts_Click;
             btnSyncInvoices.Click += BtnSyncInvoices_Click;
 
             // Add text changed handlers for Carbon settings
@@ -41,6 +39,12 @@ namespace CarbonQuickBooks
             ValidateSettings();
         }
 
+        public Form1()
+        {
+            InitializeComponent();
+            _ = InitializeAsync(); // Fire and forget initialization
+        }
+
         private void ValidateSettings()
         {
             bool isValid = !string.IsNullOrWhiteSpace(txtCompanyFile.Text) &&
@@ -51,7 +55,7 @@ namespace CarbonQuickBooks
                           !string.IsNullOrWhiteSpace(txtSalesRevenueAccount.Text);
 
             btnSyncInvoices.Enabled = isValid;
-            btnSync.Enabled = isValid;  // btnSync is the contacts sync button
+            btnSyncContacts.Enabled = isValid;  // btnSync is the contacts sync button
         }
 
         private async Task InitializeCarbonServiceAsync()
@@ -70,11 +74,11 @@ namespace CarbonQuickBooks
                     .Build();
 
                 _carbonService = await CarbonService.CreateAsync(configuration);
-                WriteToDebugConsole("Carbon service initialized successfully.");
+                WriteToContactsDebugConsole("Carbon service initialized successfully.");
             }
             catch (Exception ex)
             {
-                WriteToDebugConsole($"Error initializing Carbon service: {ex.Message}");
+                WriteToContactsDebugConsole($"Error initializing Carbon service: {ex.Message}");
             }
         }
 
@@ -83,8 +87,8 @@ namespace CarbonQuickBooks
             ValidateSettings();
             if (_carbonService != null)
             {
-                await InitializeCarbonServiceAsync();
-                WriteToDebugConsole("Carbon configuration updated.");
+                await InitializeCarbonServiceAsync().ConfigureAwait(false);
+                WriteToContactsDebugConsole("Carbon configuration updated.");
             }
         }
 
@@ -105,7 +109,7 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void SaveSettings()
+        private async Task SaveSettings()
         {
             try
             {
@@ -122,7 +126,7 @@ namespace CarbonQuickBooks
                 ConfigManager.RefreshSection("appSettings");
 
                 // Update Carbon service with new settings
-                InitializeCarbonServiceAsync().ConfigureAwait(false);
+                await InitializeCarbonServiceAsync().ConfigureAwait(false);
                 if (_carbonService != null)
                 {
                     _carbonService.UpdateConfiguration();
@@ -148,9 +152,9 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void BtnSaveSettings_Click(object? sender, EventArgs e)
+        private async void BtnSaveSettings_Click(object? sender, EventArgs e)
         {
-            SaveSettings();
+            await SaveSettings();
         }
 
         private async Task InitializeServicesAsync()
@@ -160,7 +164,7 @@ namespace CarbonQuickBooks
             {
                 throw new Exception("Company file path is not set. Please configure it in the Settings tab.");
             }
-            // _qbService = new QuickBooksService(companyFile);
+            _qbService = new QuickBooksService(companyFile);
 
             // Create a new configuration for Carbon service
             var carbonConfig = new Dictionary<string, string?>
@@ -177,11 +181,11 @@ namespace CarbonQuickBooks
             _carbonService = await CarbonService.CreateAsync(configuration);
         }
 
-        private void WriteToDebugConsole(string message)
+        private void WriteToContactsDebugConsole(string message)
         {
             if (txtDebugConsole.InvokeRequired)
             {
-                txtDebugConsole.Invoke(new Action(() => WriteToDebugConsole(message)));
+                txtDebugConsole.Invoke(new Action(() => WriteToContactsDebugConsole(message)));
                 return;
             }
             
@@ -190,41 +194,54 @@ namespace CarbonQuickBooks
             txtDebugConsole.ScrollToCaret();
         }
 
-        private async void BtnSync_Click(object? sender, EventArgs e)
+        private void WriteToInvoiceDebugConsole(string message)
+        {
+            if (txtInvoicesDebugConsole.InvokeRequired)
+            {
+                txtInvoicesDebugConsole.Invoke(new Action(() => WriteToInvoiceDebugConsole(message)));
+                return;
+            }
+            
+            txtInvoicesDebugConsole.AppendText(message + Environment.NewLine);
+            txtInvoicesDebugConsole.SelectionStart = txtInvoicesDebugConsole.Text.Length;
+            txtInvoicesDebugConsole.ScrollToCaret();
+        }
+
+        private async void BtnSyncContacts_Click(object? sender, EventArgs e)
         {
             try
             {
                 await InitializeServicesAsync();
                 Cursor = Cursors.WaitCursor;
 
-                WriteToDebugConsole("=== Starting QuickBooks Sync ===");
+                WriteToContactsDebugConsole("=== Starting QuickBooks Sync ===");
                 
                 // Get and display Carbon customers
-                WriteToDebugConsole("\n=== Carbon Data ===");
+                WriteToContactsDebugConsole("\n=== Carbon Data ===");
                 if (_carbonService != null)
                 {
                     var carbonCustomers = await _carbonService.GetCustomers();
-                    WriteToDebugConsole($"\n--- Carbon Customers Found: {carbonCustomers.Count} ---");
+                    WriteToContactsDebugConsole($"\n--- Carbon Customers Found: {carbonCustomers.Count} ---");
                     foreach (var customer in carbonCustomers)
                     {
-                        WriteToDebugConsole($"Customer: {customer.Name}");
-                        WriteToDebugConsole("  ---");
+                        WriteToContactsDebugConsole($"Customer: {customer.Name}");
+                        WriteToContactsDebugConsole("  ---");
                     }
 
                     var carbonSuppliers = await _carbonService.GetSuppliers();
-                    WriteToDebugConsole($"\n--- Carbon Suppliers Found: {carbonSuppliers.Count} ---");
+                    WriteToContactsDebugConsole($"\n--- Carbon Suppliers Found: {carbonSuppliers.Count} ---");
                     foreach (var supplier in carbonSuppliers)
                     {
-                        WriteToDebugConsole($"Supplier: {supplier.Name}");
-                        WriteToDebugConsole("  ---");
+                        WriteToContactsDebugConsole($"Supplier: {supplier.Name}");
+                        WriteToContactsDebugConsole("  ---");
                     }
                 }
 
-                WriteToDebugConsole("=== Sync Complete ===\n");
+                WriteToContactsDebugConsole("=== Sync Complete ===\n");
             }
             catch (Exception ex)
             {
-                WriteToDebugConsole($"ERROR during sync: {ex.Message}");
+                WriteToContactsDebugConsole($"ERROR during sync: {ex.Message}");
                 MessageBox.Show($"Error during sync: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -277,19 +294,61 @@ namespace CarbonQuickBooks
                 await InitializeServicesAsync();
                 Cursor = Cursors.WaitCursor;
 
-                WriteToDebugConsole("=== Starting QuickBooks Invoice Sync ===");
+                WriteToInvoiceDebugConsole("\n=== Starting Invoice Sync Process ===");
+                WriteToInvoiceDebugConsole("Initializing services...");
                 
-                if (_carbonService != null)
+                if (_carbonService == null)
                 {
-                    // TODO: Implement invoice sync logic here
-                    WriteToDebugConsole("Invoice sync not yet implemented");
+                    throw new Exception("Carbon service is not initialized");
                 }
 
-                WriteToDebugConsole("=== Invoice Sync Complete ===\n");
+                if (_qbService == null) 
+                {
+                    throw new Exception("QuickBooks service is not initialized");
+                }
+
+                WriteToInvoiceDebugConsole("\nFetching uninvoiced purchase orders...");
+                var uninvoicedPOs = await _carbonService.GetUninvoicedPurchaseOrders();
+                WriteToInvoiceDebugConsole($"Found {uninvoicedPOs.Count} uninvoiced purchase orders");
+
+                foreach (var po in uninvoicedPOs)
+                {
+                    WriteToInvoiceDebugConsole($"\nProcessing Purchase Order: {po.Id}");
+                    
+                    // Get PO lines
+                    var poLines = await _carbonService.GetPurchaseOrderLines(po.Id);
+                    WriteToInvoiceDebugConsole($"Found {poLines.Count} lines for PO {po.Id}");
+
+                    try {
+                        // Add PO invoice to QuickBooks
+                        _qbService.AddPurchaseOrderInvoice(po, poLines);
+                        WriteToInvoiceDebugConsole($"Successfully created QB invoice for PO {po.Id}");
+                    }
+                    catch (Exception ex) {
+                        WriteToInvoiceDebugConsole($"Failed to create QB invoice for PO {po.Id}: {ex.Message}");
+                        continue;
+                    }
+                }
+
+                WriteToInvoiceDebugConsole("\nFetching uninvoiced shipments...");
+                var uninvoicedShipments = await _carbonService.GetUninvoicedShipments();
+                WriteToInvoiceDebugConsole($"Found {uninvoicedShipments.Count} uninvoiced shipments");
+                
+                foreach (var shipment in uninvoicedShipments)
+                {
+                    WriteToInvoiceDebugConsole($"  Shipment ID: {shipment.Id}");
+                }
+
+                WriteToInvoiceDebugConsole("\nSummary:");
+                WriteToInvoiceDebugConsole($"- Total Purchase Orders Processed: {uninvoicedPOs.Count}");
+                WriteToInvoiceDebugConsole($"- Total Shipments to Process: {uninvoicedShipments.Count}");
+                
+                WriteToInvoiceDebugConsole("\n=== Invoice Sync Process Complete ===");
             }
             catch (Exception ex)
             {
-                WriteToDebugConsole($"ERROR during invoice sync: {ex.Message}");
+                WriteToInvoiceDebugConsole($"\nERROR during invoice sync: {ex.Message}");
+                WriteToInvoiceDebugConsole($"Stack trace: {ex.StackTrace}");
                 MessageBox.Show($"Error during invoice sync: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using CarbonQuickBooks.Models;
 using Interop.QBFC16;
-
+using Models;
 
 namespace CarbonQuickBooks.Services
 {
@@ -40,6 +40,136 @@ namespace CarbonQuickBooks.Services
                 if (response?.StatusCode != 0)
                 {
                     throw new Exception($"QuickBooks error: {response?.StatusMessage}");
+                }
+            }
+            finally
+            {
+                CloseConnection();
+            }
+        }
+
+        public void AddSalesOrderInvoice(SalesOrder salesOrder, List<SalesOrderLine> lines)
+        {
+            OpenConnection();
+
+            try
+            {
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                // Create invoice add request
+                var invoiceAdd = requestMsgSet.AppendInvoiceAddRq();
+
+                // Set customer reference
+                invoiceAdd.CustomerRef.FullName.SetValue(salesOrder.CustomerId);
+
+                // Set transaction date
+                invoiceAdd.TxnDate.SetValue(salesOrder.OrderDate);
+
+                // Set reference number (SO number)
+                invoiceAdd.RefNumber.SetValue(salesOrder.SalesOrderId);
+
+                // Add memo
+                invoiceAdd.Memo.SetValue($"SO: {salesOrder.SalesOrderId}");
+
+                // Add lines
+                foreach (var line in lines)
+                {
+                    var invoiceLine = invoiceAdd.ORInvoiceLineAddList.Append();
+                    var invoiceLineAdd = invoiceLine.InvoiceLineAdd;
+
+                    // Set item reference if provided
+                    if (!string.IsNullOrEmpty(line.ItemId))
+                    {
+                        invoiceLineAdd.ItemRef.FullName.SetValue(line.ItemId);
+                    }
+
+                    // Set description
+                    invoiceLineAdd.Desc.SetValue(line.Description ?? line.ItemReadableId ?? "");
+
+                    // Set quantity
+                    invoiceLineAdd.Quantity.SetValue((double)(line.QuantityToInvoice ?? 0));
+
+
+                    // Set amount
+                    decimal lineAmount = (line.QuantityToInvoice ?? 0) * (line.UnitPrice ?? 0);
+                    invoiceLineAdd.Amount.SetValue((double)lineAmount);
+
+                    // Set tax info if applicable
+                    if (line.TaxPercent > 0)
+                    {
+                        invoiceLineAdd.SalesTaxCodeRef.FullName.SetValue("Tax");
+                    }
+                }
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add invoice to QuickBooks: {response?.StatusMessage}");
+                }
+            }
+            finally
+            {
+                CloseConnection();
+            }
+        }
+
+        public void AddPurchaseOrderInvoice(PurchaseOrder purchaseOrder, List<PurchaseOrderLine> lines)
+        {
+            OpenConnection();
+
+            try
+            {
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                // Create bill add request
+                var billAdd = requestMsgSet.AppendBillAddRq();
+
+                // Set vendor reference
+                billAdd.VendorRef.FullName.SetValue(purchaseOrder.SupplierId);
+
+                // Set transaction date
+                billAdd.TxnDate.SetValue(purchaseOrder.OrderDate ?? DateTime.Now);
+
+                // Set reference number (PO number)
+                billAdd.RefNumber.SetValue(purchaseOrder.PurchaseOrderId);
+
+                // Add memo
+                billAdd.Memo.SetValue($"PO: {purchaseOrder.PurchaseOrderId}");
+
+                // Add lines
+                foreach (var line in lines)
+                {
+                    var billLine = billAdd.ExpenseLineAddList.Append();
+
+                    // Set account number if provided
+                    if (!string.IsNullOrEmpty(line.AccountNumber))
+                    {
+                        billLine.AccountRef.FullName.SetValue(line.AccountNumber);
+                    }
+
+                    
+
+                    // Set amount
+                    decimal lineAmount = (line.QuantityToInvoice ?? 0) * (line.UnitPrice ?? 0);
+                    billLine.Amount.SetValue((double)lineAmount);
+
+                    // Set tax amount if applicable
+                    if (line.TaxAmount > 0)
+                    {
+                        billLine.TaxAmount.SetValue((double)line.TaxAmount);
+                    }
+                }
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add bill to QuickBooks: {response?.StatusMessage}");
                 }
             }
             finally

@@ -46,7 +46,7 @@
             label2 = new Label();
             label1 = new Label();
             tabContacts = new TabPage();
-            btnSync = new Button();
+            btnSyncContacts = new Button();
             txtDebugConsole = new TextBox();
             lblDebugConsole = new Label();
             tabInvoices = new TabPage();
@@ -224,7 +224,7 @@
             // 
             // tabContacts
             // 
-            tabContacts.Controls.Add(btnSync);
+            tabContacts.Controls.Add(btnSyncContacts);
             tabContacts.Controls.Add(txtDebugConsole);
             tabContacts.Controls.Add(lblDebugConsole);
             tabContacts.Location = new Point(4, 24);
@@ -235,14 +235,14 @@
             tabContacts.Text = "Contacts";
             tabContacts.UseVisualStyleBackColor = true;
             // 
-            // btnSync
+            // btnSyncContacts
             // 
-            btnSync.Location = new Point(20, 20);
-            btnSync.Name = "btnSync";
-            btnSync.Size = new Size(120, 29);
-            btnSync.TabIndex = 1;
-            btnSync.Text = "Sync Contacts";
-            btnSync.UseVisualStyleBackColor = true;
+            btnSyncContacts.Location = new Point(20, 20);
+            btnSyncContacts.Name = "btnSyncContacts";
+            btnSyncContacts.Size = new Size(120, 29);
+            btnSyncContacts.TabIndex = 1;
+            btnSyncContacts.Text = "Sync Contacts";
+            btnSyncContacts.UseVisualStyleBackColor = true;
             // 
             // lblDebugConsole
             // 
@@ -345,7 +345,7 @@
         private Button btnSaveSettings;
         private Button btnBrowseCompanyFile;
         private Button btnTestConnection;
-        private Button btnSync;
+        private Button btnSyncContacts;
         private TextBox txtDebugConsole;
         private Label lblDebugConsole;
         private Button btnSyncInvoices;

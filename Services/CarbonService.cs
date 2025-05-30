@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Supabase;
+using static Supabase.Postgrest.Constants.Operator;
 using Models;
 using System.Threading.Tasks;
 using System.Collections.Generic;
@@ -96,6 +97,77 @@ namespace CarbonQuickBooks.Services
                 // Log the exception details
                 System.Diagnostics.Debug.WriteLine($"Error getting suppliers: {ex}");
                 return new List<Supplier>();
+            }
+        }
+
+        public async Task<List<Shipment>> GetUninvoicedShipments()
+        {
+            if (_client == null)
+            {
+                return new List<Shipment>();
+            }
+
+            try
+            {
+                var response = await _client.From<Shipment>()
+                    .Select("id")
+                    .Where(x => x.Invoiced == false)
+                    .Get();
+                return response.Models;
+            }
+            catch (Exception ex)
+            {
+                // Log the exception details
+                System.Diagnostics.Debug.WriteLine($"Error getting uninvoiced shipments: {ex}");
+                return new List<Shipment>();
+            }
+        }
+
+        
+
+        public async Task<List<PurchaseOrder>> GetUninvoicedPurchaseOrders()
+        {
+            if (_client == null)
+            {
+                return new List<PurchaseOrder>();
+            }
+
+            try
+            {
+                var response = await _client.From<PurchaseOrder>()
+                    .Select("id")
+                    .Filter("status", In, new List<object> { "To Invoice", "To Receive and Invoice" })
+                    .Get();
+                return response.Models;
+            }
+            catch (Exception ex)
+            {
+                // Log the exception details
+                System.Diagnostics.Debug.WriteLine($"Error getting uninvoiced purchase orders: {ex}");
+                return new List<PurchaseOrder>();
+            }
+        }
+
+        public async Task<List<PurchaseOrderLine>> GetPurchaseOrderLines(string purchaseOrderId)
+        {
+            if (_client == null)
+            {
+                return new List<PurchaseOrderLine>();
+            }
+
+            try
+            {
+                var response = await _client.From<PurchaseOrderLine>()
+                    .Select("*")
+                    .Where(x => x.PurchaseOrderId == purchaseOrderId)
+                    .Get();
+                return response.Models;
+            }
+            catch (Exception ex)
+            {
+                // Log the exception details
+                System.Diagnostics.Debug.WriteLine($"Error getting purchase order lines: {ex}");
+                return new List<PurchaseOrderLine>();
             }
         }
     }

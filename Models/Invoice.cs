@@ -9,4 +9,14 @@ namespace CarbonQuickBooks.Models
         public decimal Amount { get; set; }
         public string Status { get; set; } = string.Empty;
     }
+
+    public class InvoiceItem
+    {
+        public string ItemName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TaxAmount { get; set; }
+        public decimal Total { get; set; }
+    }
 }
+
