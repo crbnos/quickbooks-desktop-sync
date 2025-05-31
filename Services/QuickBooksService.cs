@@ -9,51 +9,313 @@ namespace CarbonQuickBooks.Services
     {
         private QBSessionManager? _sessionManager;
         private bool _connectionOpen;
-        private readonly string _companyFile;
+        private string _companyFile;
+        private DateTime _lastConnectionTime;
+        private const int CONNECTION_TIMEOUT_MINUTES = 10;
 
         public QuickBooksService(string companyFile)
         {
             _companyFile = companyFile;
         }
 
-        public void TestConnection()
+        private bool IsConnectionValid()
+        {
+            if (!_connectionOpen || _sessionManager == null)
+                return false;
+
+            // Check if connection has timed out
+            if ((DateTime.Now - _lastConnectionTime).TotalMinutes > CONNECTION_TIMEOUT_MINUTES)
+                return false;
+
+            try
+            {
+                // Try a lightweight operation to verify connection
+                var requestMsgSet = _sessionManager.CreateMsgSetRequest("US", 16, 0);
+                requestMsgSet.AppendCompanyQueryRq();
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                return responseMsgSet.ResponseList?.GetAt(0)?.StatusCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void EnsureValidConnection()
         {
             if (string.IsNullOrEmpty(_companyFile))
             {
                 throw new Exception("Company file path is not set.");
             }
 
+            if (IsConnectionValid())
+                return;
+
+            // Close existing connection if any
+            CloseConnection();
+
+            // Open new connection
+            _sessionManager = new QBSessionManager();
             try
             {
-                OpenConnection();
-                // Try to create a simple request to verify the connection is working
+                _sessionManager.OpenConnection2("", "CarbonQuickBooks Sync", ENConnectionType.ctLocalQBD);
+                _sessionManager.BeginSession(_companyFile, ENOpenMode.omDontCare);
+                _connectionOpen = true;
+                _lastConnectionTime = DateTime.Now;
+            }
+            catch (Exception ex)
+            {
+                CloseConnection();
+                throw new Exception("Failed to connect to QuickBooks: " + ex.Message);
+            }
+        }
+
+        private void CloseConnection()
+        {
+            if (!_connectionOpen) return;
+
+            try
+            {
+                if (_sessionManager != null)
+                {
+                    _sessionManager.EndSession();
+                    _sessionManager.CloseConnection();
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Failed to close QuickBooks connection: " + ex.Message);
+            }
+            finally
+            {
+                _connectionOpen = false;
+                _lastConnectionTime = DateTime.MinValue;
+            }
+        }
+
+        public void TestConnection()
+        {
+            try
+            {
+                EnsureValidConnection();
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public void AddCustomer(Customer customer)
+        {
+            try
+            {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var customerAdd = requestMsgSet.AppendCustomerAddRq();
+
+                // Set required fields
+                customerAdd.Name.SetValue(customer.Name);
                 
-                // Append a simple query (CompanyQuery is lightweight)
-                requestMsgSet.AppendCompanyQueryRq();
-                
-                // Execute the request
+                // Set optional fields if available
+                if (!string.IsNullOrEmpty(customer.Phone))
+                {
+                    customerAdd.Phone.SetValue(customer.Phone);
+                }
+
+                if (!string.IsNullOrEmpty(customer.TaxId))
+                {
+                    customerAdd.TaxRegistrationNumber.SetValue(customer.TaxId);
+                }
+
                 var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
                 var response = responseMsgSet.ResponseList?.GetAt(0);
 
                 if (response?.StatusCode != 0)
                 {
-                    throw new Exception($"QuickBooks error: {response?.StatusMessage}");
+                    throw new Exception($"Failed to add customer to QuickBooks: {response?.StatusMessage}");
                 }
             }
-            finally
+            catch (Exception)
             {
                 CloseConnection();
+                throw;
+            }
+        }
+
+        public void AddSupplier(Supplier supplier)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var vendorAdd = requestMsgSet.AppendVendorAddRq();
+
+                // Set required fields
+                vendorAdd.Name.SetValue(supplier.Name);
+                
+                // Set optional fields if available
+                if (!string.IsNullOrEmpty(supplier.Phone))
+                {
+                    vendorAdd.Phone.SetValue(supplier.Phone);
+                }
+
+                if (!string.IsNullOrEmpty(supplier.TaxId))
+                {
+                    vendorAdd.TaxRegistrationNumber.SetValue(supplier.TaxId);
+                }
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add vendor to QuickBooks: {response?.StatusMessage}");
+                }
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
+            }
+        }
+
+        public void AddContact(Contact contact)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                if (contact.Type.ToLower() == "customer")
+                {
+                    var customerAdd = requestMsgSet.AppendCustomerAddRq();
+                    customerAdd.Name.SetValue(contact.Name);
+                    
+                    if (!string.IsNullOrEmpty(contact.CompanyName))
+                    {
+                        customerAdd.CompanyName.SetValue(contact.CompanyName);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(contact.Email))
+                    {
+                        customerAdd.Email.SetValue(contact.Email);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(contact.Phone))
+                    {
+                        customerAdd.Phone.SetValue(contact.Phone);
+                    }
+
+                    if (contact.BillingAddress != null)
+                    {
+                        var billAddress = customerAdd.BillAddress;
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line1)) billAddress.Addr1.SetValue(contact.BillingAddress.Line1);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line2)) billAddress.Addr2.SetValue(contact.BillingAddress.Line2);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line3)) billAddress.Addr3.SetValue(contact.BillingAddress.Line3);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line4)) billAddress.Addr4.SetValue(contact.BillingAddress.Line4);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line5)) billAddress.Addr5.SetValue(contact.BillingAddress.Line5);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.City)) billAddress.City.SetValue(contact.BillingAddress.City);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.State)) billAddress.State.SetValue(contact.BillingAddress.State);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.PostalCode)) billAddress.PostalCode.SetValue(contact.BillingAddress.PostalCode);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Country)) billAddress.Country.SetValue(contact.BillingAddress.Country);
+                    }
+
+                    if (contact.ShippingAddress != null)
+                    {
+                        var shipAddress = customerAdd.ShipAddress;
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line1)) shipAddress.Addr1.SetValue(contact.ShippingAddress.Line1);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line2)) shipAddress.Addr2.SetValue(contact.ShippingAddress.Line2);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line3)) shipAddress.Addr3.SetValue(contact.ShippingAddress.Line3);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line4)) shipAddress.Addr4.SetValue(contact.ShippingAddress.Line4);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line5)) shipAddress.Addr5.SetValue(contact.ShippingAddress.Line5);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.City)) shipAddress.City.SetValue(contact.ShippingAddress.City);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.State)) shipAddress.State.SetValue(contact.ShippingAddress.State);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.PostalCode)) shipAddress.PostalCode.SetValue(contact.ShippingAddress.PostalCode);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Country)) shipAddress.Country.SetValue(contact.ShippingAddress.Country);
+                    }
+                }
+                else if (contact.Type.ToLower() == "vendor")
+                {
+                    var vendorAdd = requestMsgSet.AppendVendorAddRq();
+                    vendorAdd.Name.SetValue(contact.Name);
+                    
+                    if (!string.IsNullOrEmpty(contact.CompanyName))
+                    {
+                        vendorAdd.CompanyName.SetValue(contact.CompanyName);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(contact.Email))
+                    {
+                        vendorAdd.Email.SetValue(contact.Email);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(contact.Phone))
+                    {
+                        vendorAdd.Phone.SetValue(contact.Phone);
+                    }
+
+                    if (contact.BillingAddress != null)
+                    {
+                        var vendorAddress = vendorAdd.VendorAddress;
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line1)) vendorAddress.Addr1.SetValue(contact.BillingAddress.Line1);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line2)) vendorAddress.Addr2.SetValue(contact.BillingAddress.Line2);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line3)) vendorAddress.Addr3.SetValue(contact.BillingAddress.Line3);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line4)) vendorAddress.Addr4.SetValue(contact.BillingAddress.Line4);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Line5)) vendorAddress.Addr5.SetValue(contact.BillingAddress.Line5);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.City)) vendorAddress.City.SetValue(contact.BillingAddress.City);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.State)) vendorAddress.State.SetValue(contact.BillingAddress.State);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.PostalCode)) vendorAddress.PostalCode.SetValue(contact.BillingAddress.PostalCode);
+                        if (!string.IsNullOrEmpty(contact.BillingAddress.Country)) vendorAddress.Country.SetValue(contact.BillingAddress.Country);
+                    }
+
+                    if (contact.ShippingAddress != null)
+                    {
+                        var shipAddress = vendorAdd.ShipAddress;
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line1)) shipAddress.Addr1.SetValue(contact.ShippingAddress.Line1);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line2)) shipAddress.Addr2.SetValue(contact.ShippingAddress.Line2);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line3)) shipAddress.Addr3.SetValue(contact.ShippingAddress.Line3);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line4)) shipAddress.Addr4.SetValue(contact.ShippingAddress.Line4);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Line5)) shipAddress.Addr5.SetValue(contact.ShippingAddress.Line5);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.City)) shipAddress.City.SetValue(contact.ShippingAddress.City);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.State)) shipAddress.State.SetValue(contact.ShippingAddress.State);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.PostalCode)) shipAddress.PostalCode.SetValue(contact.ShippingAddress.PostalCode);
+                        if (!string.IsNullOrEmpty(contact.ShippingAddress.Country)) shipAddress.Country.SetValue(contact.ShippingAddress.Country);
+                    }
+                }
+                else
+                {
+                    throw new ArgumentException("Contact type must be either 'Customer' or 'Vendor'");
+                }
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add contact to QuickBooks: {response?.StatusMessage}");
+                }
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
             }
         }
 
         public void AddSalesOrderInvoice(SalesOrder salesOrder, List<SalesOrderLine> lines)
         {
-            OpenConnection();
-
             try
             {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
@@ -110,18 +372,19 @@ namespace CarbonQuickBooks.Services
                     throw new Exception($"Failed to add invoice to QuickBooks: {response?.StatusMessage}");
                 }
             }
-            finally
+            catch (Exception)
             {
-                CloseConnection();
+                CloseConnection(); // Close connection on error
+                throw;
             }
         }
 
-        public void AddPurchaseOrderInvoice(PurchaseOrder purchaseOrder, List<PurchaseOrderLine> lines)
+        public void AddPurchaseOrderInvoice(PurchaseOrder purchaseOrder, List<PurchaseOrderLine> lines, string accountNumber)
         {
-            OpenConnection();
-
             try
             {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
@@ -146,12 +409,10 @@ namespace CarbonQuickBooks.Services
                     var billLine = billAdd.ExpenseLineAddList.Append();
 
                     // Set account number if provided
-                    if (!string.IsNullOrEmpty(line.AccountNumber))
+                    if (!string.IsNullOrEmpty(accountNumber))
                     {
-                        billLine.AccountRef.FullName.SetValue(line.AccountNumber);
+                        billLine.AccountRef.FullName.SetValue(accountNumber);
                     }
-
-                    
 
                     // Set amount
                     decimal lineAmount = (line.QuantityToInvoice ?? 0) * (line.UnitPrice ?? 0);
@@ -172,58 +433,20 @@ namespace CarbonQuickBooks.Services
                     throw new Exception($"Failed to add bill to QuickBooks: {response?.StatusMessage}");
                 }
             }
-            finally
+            catch (Exception)
             {
-                CloseConnection();
-            }
-        }
-
-        private void OpenConnection()
-        {
-            if (_connectionOpen) return;
-
-            _sessionManager = new QBSessionManager();
-            try
-            {
-                _sessionManager.OpenConnection2("", "CarbonQuickBooks Sync", ENConnectionType.ctLocalQBD);
-                _sessionManager.BeginSession(_companyFile, ENOpenMode.omDontCare);
-                _connectionOpen = true;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Failed to connect to QuickBooks: " + ex.Message);
-            }
-        }
-
-        private void CloseConnection()
-        {
-            if (!_connectionOpen) return;
-
-            try
-            {
-                if (_sessionManager != null)
-                {
-                    _sessionManager.EndSession();
-                    _sessionManager.CloseConnection();
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Failed to close QuickBooks connection: " + ex.Message);
-            }
-            finally
-            {
-                _connectionOpen = false;
+                CloseConnection(); // Close connection on error
+                throw;
             }
         }
 
         public List<Contact> GetCustomers()
         {
             var customers = new List<Contact>();
-            OpenConnection();
-
             try
             {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
@@ -289,9 +512,10 @@ namespace CarbonQuickBooks.Services
                     }
                 }
             }
-            finally
+            catch (Exception)
             {
-                CloseConnection();
+                CloseConnection(); // Close connection on error
+                throw;
             }
 
             return customers;
@@ -300,10 +524,10 @@ namespace CarbonQuickBooks.Services
         public List<Contact> GetVendors()
         {
             var vendors = new List<Contact>();
-            OpenConnection();
-
             try
             {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
@@ -369,9 +593,10 @@ namespace CarbonQuickBooks.Services
                     }
                 }
             }
-            finally
+            catch (Exception)
             {
-                CloseConnection();
+                CloseConnection(); // Close connection on error
+                throw;
             }
 
             return vendors;
@@ -380,10 +605,10 @@ namespace CarbonQuickBooks.Services
         public List<Invoice> GetInvoices(bool salesInvoices = true)
         {
             var invoices = new List<Invoice>();
-            OpenConnection();
-
             try
             {
+                EnsureValidConnection();
+
                 var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
@@ -447,12 +672,66 @@ namespace CarbonQuickBooks.Services
                     }
                 }
             }
-            finally
+            catch (Exception)
             {
-                CloseConnection();
+                CloseConnection(); // Close connection on error
+                throw;
             }
 
             return invoices;
+        }
+
+        public bool CustomerExists(string customerName)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var customerQuery = requestMsgSet.AppendCustomerQueryRq();
+                customerQuery.ORCustomerListQuery.FullNameList.Add(customerName.ToUpper());
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                return response?.StatusCode == 0 && response.Detail != null;
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
+            }
+        }
+
+        public bool VendorExists(string vendorName)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var vendorQuery = requestMsgSet.AppendVendorQueryRq();
+                vendorQuery.ORVendorListQuery.FullNameList.Add(vendorName.ToUpper());
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                return response?.StatusCode == 0 && response.Detail != null;
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
+            }
+        }
+
+        public string GetQuickBooksName(string name)
+        {
+            return name.ToUpper();
         }
 
         public void Dispose()

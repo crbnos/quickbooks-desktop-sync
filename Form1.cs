@@ -4,6 +4,7 @@ using System.Configuration;
 using Microsoft.Extensions.Configuration;
 using IConfig = Microsoft.Extensions.Configuration.IConfiguration;
 using ConfigManager = System.Configuration.ConfigurationManager;
+using Models;
 
 namespace CarbonQuickBooks
 {
@@ -314,14 +315,45 @@ namespace CarbonQuickBooks
                 foreach (var po in uninvoicedPOs)
                 {
                     WriteToInvoiceDebugConsole($"\nProcessing Purchase Order: {po.Id}");
+
+                    // Get supplier details from Carbon
+                    var supplier = await _carbonService.GetSupplierById(po.SupplierId);
+                    if (supplier == null)
+                    {
+                        WriteToInvoiceDebugConsole($"Failed to find supplier {po.SupplierId} in Carbon");
+                        continue;
+                    }
+
+                    // Check if supplier exists in QuickBooks
+                    string quickbooksSupplierName = _qbService.GetQuickBooksName(supplier.Name);
+                    bool supplierExists = _qbService.VendorExists(quickbooksSupplierName);
+
+                    if (!supplierExists)
+                    {
+                        WriteToInvoiceDebugConsole($"Creating supplier {supplier.Name} in QuickBooks...");
+                        var supplierToAdd = new Supplier
+                        {
+                            Name = supplier.Name,
+                            // Add other fields as needed
+                        };
+                        _qbService.AddSupplier(supplierToAdd);
+                        
+                        // Update Carbon with QuickBooks external ID
+                        await _carbonService.UpdateSupplierExternalId(supplier.Id, quickbooksSupplierName);
+                        WriteToInvoiceDebugConsole($"Supplier {supplier.Name} created in QuickBooks and updated in Carbon");
+                    }
                     
                     // Get PO lines
                     var poLines = await _carbonService.GetPurchaseOrderLines(po.Id);
                     WriteToInvoiceDebugConsole($"Found {poLines.Count} lines for PO {po.Id}");
 
                     try {
+                        // Update PO with QuickBooks supplier name
+                        po.SupplierId = quickbooksSupplierName;
+                        
                         // Add PO invoice to QuickBooks
-                        _qbService.AddPurchaseOrderInvoice(po, poLines);
+                        _qbService.AddPurchaseOrderInvoice(po, poLines, txtPurchaseAccount.Text);
+                        await _carbonService.MarkPurchaseOrderAsInvoiced(po);
                         WriteToInvoiceDebugConsole($"Successfully created QB invoice for PO {po.Id}");
                     }
                     catch (Exception ex) {

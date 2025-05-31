@@ -5,6 +5,7 @@ using Models;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
+using CarbonQuickBooks.Models;
 
 namespace CarbonQuickBooks.Services
 {
@@ -110,7 +111,7 @@ namespace CarbonQuickBooks.Services
             try
             {
                 var response = await _client.From<Shipment>()
-                    .Select("id")
+                    .Select("*")
                     .Where(x => x.Invoiced == false)
                     .Get();
                 return response.Models;
@@ -123,7 +124,50 @@ namespace CarbonQuickBooks.Services
             }
         }
 
-        
+        public async Task InsertContactReferences(List<Contact> contacts)
+        {
+            if (_client == null) return;
+
+            try
+            {
+                foreach (var contact in contacts)
+                {
+                    if (contact.Type.Equals("Customer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var customer = new Customer
+                        {
+                            Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
+                            CreatedAt = DateTime.UtcNow,
+                            ExternalId = new Dictionary<string, object>
+                            {
+                                { "quickbooks", contact.Name }
+                            }
+                        };
+
+                        await _client.From<Customer>().Insert(customer);
+                    }
+                    else if (contact.Type.Equals("Supplier", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var supplier = new Supplier
+                        {
+                            Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
+                            CreatedAt = DateTime.UtcNow,
+                            ExternalId = new Dictionary<string, object>
+                            {
+                                { "quickbooks", contact.Name }
+                            }
+                        };
+
+                        await _client.From<Supplier>().Insert(supplier);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error inserting contact references: {ex}");
+                throw;
+            }
+        }
 
         public async Task<List<PurchaseOrder>> GetUninvoicedPurchaseOrders()
         {
@@ -135,7 +179,7 @@ namespace CarbonQuickBooks.Services
             try
             {
                 var response = await _client.From<PurchaseOrder>()
-                    .Select("id")
+                    .Select("*")
                     .Filter("status", In, new List<object> { "To Invoice", "To Receive and Invoice" })
                     .Get();
                 return response.Models;
@@ -146,6 +190,16 @@ namespace CarbonQuickBooks.Services
                 System.Diagnostics.Debug.WriteLine($"Error getting uninvoiced purchase orders: {ex}");
                 return new List<PurchaseOrder>();
             }
+        }
+
+        public async Task MarkPurchaseOrderAsInvoiced(PurchaseOrder purchaseOrder)
+        {
+            if (_client == null) return;
+            
+            await _client.From<PurchaseOrder>()
+                .Where(x => x.Id == purchaseOrder.Id)
+                .Set(x => x.Status, purchaseOrder.Status == "To Receive and Invoice" ? "To Receive" : "Completed")
+                .Update();
         }
 
         public async Task<List<PurchaseOrderLine>> GetPurchaseOrderLines(string purchaseOrderId)
@@ -168,6 +222,98 @@ namespace CarbonQuickBooks.Services
                 // Log the exception details
                 System.Diagnostics.Debug.WriteLine($"Error getting purchase order lines: {ex}");
                 return new List<PurchaseOrderLine>();
+            }
+        }
+
+        public async Task<Customer?> GetCustomerById(string customerId)
+        {
+            if (_client == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var response = await _client.From<Customer>()
+                    .Select("*")
+                    .Where(x => x.Id == customerId)
+                    .Get();
+                return response.Models.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting customer by ID: {ex}");
+                return null;
+            }
+        }
+
+        public async Task<Supplier?> GetSupplierById(string supplierId)
+        {
+            if (_client == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var response = await _client.From<Supplier>()
+                    .Select("*")
+                    .Where(x => x.Id == supplierId)
+                    .Get();
+                return response.Models.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting supplier by ID: {ex}");
+                return null;
+            }
+        }
+
+        public async Task UpdateCustomerExternalId(string customerId, string quickbooksName)
+        {
+            if (_client == null) return;
+
+            try
+            {
+                var customer = await GetCustomerById(customerId);
+                if (customer == null) return;
+
+                var externalIds = customer.ExternalId ?? new Dictionary<string, object>();
+                externalIds["quickbooks"] = quickbooksName;
+
+                await _client.From<Customer>()
+                    .Where(x => x.Id == customerId)
+                    .Set(x => x.ExternalId, externalIds)
+                    .Update();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating customer external ID: {ex}");
+                throw;
+            }
+        }
+
+        public async Task UpdateSupplierExternalId(string supplierId, string quickbooksName)
+        {
+            if (_client == null) return;
+
+            try
+            {
+                var supplier = await GetSupplierById(supplierId);
+                if (supplier == null) return;
+
+                var externalIds = supplier.ExternalId ?? new Dictionary<string, object>();
+                externalIds["quickbooks"] = quickbooksName;
+
+                await _client.From<Supplier>()
+                    .Where(x => x.Id == supplierId)
+                    .Set(x => x.ExternalId, externalIds)
+                    .Update();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating supplier external ID: {ex}");
+                throw;
             }
         }
     }
