@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
 using CarbonQuickBooks.Models;
+using System.Linq;
 
 namespace CarbonQuickBooks.Services
 {
@@ -13,6 +14,7 @@ namespace CarbonQuickBooks.Services
     {
         private readonly IConfiguration _configuration;
         private Client? _client;
+        private string _companyId;
 
         private CarbonService(IConfiguration configuration)
         {
@@ -59,6 +61,8 @@ namespace CarbonQuickBooks.Services
         private async Task InitializeClientAsync()
         {
             _client = await CreateClient();
+            var company = await _client.From<Company>().Select("id").Single();
+            _companyId = company.Id;
         }
 
         public async Task<List<Customer>> GetCustomers()
@@ -112,7 +116,7 @@ namespace CarbonQuickBooks.Services
             {
                 var response = await _client.From<Shipment>()
                     .Select("*")
-                    .Where(x => x.Invoiced == false)
+                    .Where(x => x.Invoiced == false && x.Status == "Posted")
                     .Get();
                 return response.Models;
             }
@@ -124,47 +128,152 @@ namespace CarbonQuickBooks.Services
             }
         }
 
-        public async Task InsertContactReferences(List<Contact> contacts)
+        public async Task MarkShipmentAsInvoiced(Shipment shipment, List<ShipmentLine> shipmentLines, SalesOrder salesOrder, List<SalesOrderLine> salesOrderLines)
+        {
+            if (_client == null) return;
+            
+            
+            try
+            {
+                // Get shipment details
+                var shipmentDetails = await _client.From<Shipment>()
+                    .Select("*")
+                    .Where(x => x.Id == shipment.Id)
+                    .Single();
+
+                if (shipmentDetails == null)
+                    throw new Exception("Shipment not found");
+
+                // Get sales order details
+                if (string.IsNullOrEmpty(shipmentDetails.SourceDocumentId) || 
+                    shipmentDetails.SourceDocument != "Sales Order")
+                {
+                    throw new Exception("Shipment has no source document id");
+                }
+
+                // Get quantities by line
+                var quantitiesByLine = shipmentLines
+                    .GroupBy(l => l.LineId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Sum(l => l.ShippedQuantity)
+                    );
+
+                var salesOrderLineIds = quantitiesByLine.Keys.ToList();
+
+                if (salesOrder == null)
+                    throw new Exception("Sales order not found");
+
+                // Update each sales order line's quantityInvoiced and invoicedComplete status
+                foreach (var line in salesOrderLines)
+                {
+                    if (quantitiesByLine.ContainsKey(line.Id))
+                    {
+                        var newQuantityInvoiced = (line.QuantityInvoiced ?? 0) + quantitiesByLine[line.Id];
+                        var invoicedComplete = newQuantityInvoiced >= (line.SaleQuantity ?? 0);
+
+                        await _client.From<SalesOrderLine>()
+                            .Where(x => x.Id == line.Id)
+                            .Set(x => x.QuantityInvoiced, newQuantityInvoiced)
+                            .Set(x => x.InvoicedComplete, invoicedComplete)
+                            .Update();
+                    }
+                }
+
+                // Check if all lines are marked as sentComplete and invoicedComplete
+                var updatedSalesOrderLines = await _client.From<SalesOrderLine>()
+                    .Select("*")
+                    .Where(x => x.SalesOrderId == salesOrder.Id)
+                    .Get();
+
+                var allLinesSentComplete = updatedSalesOrderLines.Models.All(l => l.SentComplete == true);
+                var allLinesInvoicedComplete = updatedSalesOrderLines.Models.All(l => l.InvoicedComplete == true);
+
+                // Update sales order status based on sent/invoiced state
+                string newStatus;
+                if (allLinesSentComplete && allLinesInvoicedComplete)
+                {
+                    newStatus = "Completed";
+                }
+                else if (allLinesSentComplete)
+                {
+                    newStatus = "To Invoice";
+                }
+                else if (allLinesInvoicedComplete)
+                {
+                    newStatus = "To Ship";
+                }
+                else
+                {
+                    newStatus = "To Ship and Invoice";
+                }
+
+                await _client.From<SalesOrder>()
+                    .Where(x => x.Id == salesOrder.Id)
+                    .Set(x => x.Status, newStatus)
+                    .Update();
+
+                // Mark shipment as invoiced
+                await _client.From<Shipment>()
+                    .Where(x => x.Id == shipment.Id)
+                    .Set(x => x.Invoiced, true)
+                    .Update();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error marking shipment as invoiced: {ex}");
+                throw;
+            }
+            
+        }
+
+        public async Task InsertCustomer(Contact contact)
         {
             if (_client == null) return;
 
             try
             {
-                foreach (var contact in contacts)
+                var customer = new Customer
                 {
-                    if (contact.Type.Equals("Customer", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var customer = new Customer
-                        {
-                            Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
-                            CreatedAt = DateTime.UtcNow,
-                            ExternalId = new Dictionary<string, object>
-                            {
-                                { "quickbooks", contact.Name }
-                            }
-                        };
+                    Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
+                    CompanyId = _companyId,
+                    ExternalId = new Dictionary<string, object>
 
-                        await _client.From<Customer>().Insert(customer);
-                    }
-                    else if (contact.Type.Equals("Supplier", StringComparison.OrdinalIgnoreCase))
                     {
-                        var supplier = new Supplier
-                        {
-                            Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
-                            CreatedAt = DateTime.UtcNow,
-                            ExternalId = new Dictionary<string, object>
-                            {
-                                { "quickbooks", contact.Name }
-                            }
-                        };
-
-                        await _client.From<Supplier>().Insert(supplier);
+                        { "quickbooks", contact.Name }
                     }
-                }
+                };
+
+                await _client.From<Customer>().Insert(customer);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error inserting contact references: {ex}");
+                System.Diagnostics.Debug.WriteLine($"Error inserting customer: {ex}");
+                throw;
+            }
+        }
+
+        public async Task InsertSupplier(Contact contact)
+        {
+            if (_client == null) return;
+
+            try
+            {
+                var supplier = new Supplier
+                {
+                    Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
+                    CompanyId = _companyId,
+                    ExternalId = new Dictionary<string, object>
+                    {
+                        { "quickbooks", contact.Name }
+                    }
+                };
+
+                await _client.From<Supplier>().Insert(supplier);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error inserting supplier: {ex}");
                 throw;
             }
         }
@@ -268,6 +377,35 @@ namespace CarbonQuickBooks.Services
                 return null;
             }
         }
+
+        public async Task<Shipment?> GetShipmentById(string shipmentId)
+        {
+            if (_client == null) return null;
+            var response = await _client.From<Shipment>().Select("*").Where(x => x.Id == shipmentId).Get();
+            return response.Models.FirstOrDefault();
+        }
+
+        public async Task<List<ShipmentLine>> GetShipmentLines(string shipmentId)
+        {
+            if (_client == null) return new List<ShipmentLine>();
+            var response = await _client.From<ShipmentLine>().Select("*").Where(x => x.ShipmentId == shipmentId).Get();
+            return response.Models;
+        }
+
+        public async Task<SalesOrder?> GetSalesOrderById(string salesOrderId)
+        {
+            if (_client == null) return null;
+            var response = await _client.From<SalesOrder>().Select("*").Where(x => x.Id == salesOrderId).Get();
+            return response.Models.FirstOrDefault();
+        }
+
+        public async Task<List<SalesOrderLine>> GetSalesOrderLines(string salesOrderId)
+        {
+            if (_client == null) return new List<SalesOrderLine>();
+            var response = await _client.From<SalesOrderLine>().Select("*").Where(x => x.SalesOrderId == salesOrderId).Get();
+            return response.Models;
+        }
+
 
         public async Task UpdateCustomerExternalId(string customerId, string quickbooksName)
         {

@@ -310,75 +310,7 @@ namespace CarbonQuickBooks.Services
             }
         }
 
-        public void AddSalesOrderInvoice(SalesOrder salesOrder, List<SalesOrderLine> lines)
-        {
-            try
-            {
-                EnsureValidConnection();
-
-                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
-                    ?? throw new InvalidOperationException("Failed to create request message set");
-
-                // Create invoice add request
-                var invoiceAdd = requestMsgSet.AppendInvoiceAddRq();
-
-                // Set customer reference
-                invoiceAdd.CustomerRef.FullName.SetValue(salesOrder.CustomerId);
-
-                // Set transaction date
-                invoiceAdd.TxnDate.SetValue(salesOrder.OrderDate);
-
-                // Set reference number (SO number)
-                invoiceAdd.RefNumber.SetValue(salesOrder.SalesOrderId);
-
-                // Add memo
-                invoiceAdd.Memo.SetValue($"SO: {salesOrder.SalesOrderId}");
-
-                // Add lines
-                foreach (var line in lines)
-                {
-                    var invoiceLine = invoiceAdd.ORInvoiceLineAddList.Append();
-                    var invoiceLineAdd = invoiceLine.InvoiceLineAdd;
-
-                    // Set item reference if provided
-                    if (!string.IsNullOrEmpty(line.ItemId))
-                    {
-                        invoiceLineAdd.ItemRef.FullName.SetValue(line.ItemId);
-                    }
-
-                    // Set description
-                    invoiceLineAdd.Desc.SetValue(line.Description ?? line.ItemReadableId ?? "");
-
-                    // Set quantity
-                    invoiceLineAdd.Quantity.SetValue((double)(line.QuantityToInvoice ?? 0));
-
-
-                    // Set amount
-                    decimal lineAmount = (line.QuantityToInvoice ?? 0) * (line.UnitPrice ?? 0);
-                    invoiceLineAdd.Amount.SetValue((double)lineAmount);
-
-                    // Set tax info if applicable
-                    if (line.TaxPercent > 0)
-                    {
-                        invoiceLineAdd.SalesTaxCodeRef.FullName.SetValue("Tax");
-                    }
-                }
-
-                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
-                var response = responseMsgSet.ResponseList?.GetAt(0);
-
-                if (response?.StatusCode != 0)
-                {
-                    throw new Exception($"Failed to add invoice to QuickBooks: {response?.StatusMessage}");
-                }
-            }
-            catch (Exception)
-            {
-                CloseConnection(); // Close connection on error
-                throw;
-            }
-        }
-
+        
         public void AddPurchaseOrderInvoice(PurchaseOrder purchaseOrder, List<PurchaseOrderLine> lines, string accountNumber)
         {
             try
@@ -436,6 +368,138 @@ namespace CarbonQuickBooks.Services
             catch (Exception)
             {
                 CloseConnection(); // Close connection on error
+                throw;
+            }
+        }
+
+        public bool ItemExists(string itemName)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var itemQuery = requestMsgSet.AppendItemQueryRq();
+                itemQuery.ORListQuery.FullNameList.Add(itemName);
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                return response?.StatusCode == 0 && response.Detail != null;
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
+            }
+        }
+
+        public void AddShipmentInvoiceFromSalesOrder(Shipment shipment, List<ShipmentLine> shipmentLines, SalesOrder salesOrder, List<SalesOrderLine> salesOrderLines, string customerName, string salesAccountName, string expenseAccountName)
+        {
+            try
+            {
+                EnsureValidConnection();
+
+                // First ensure all items exist in QuickBooks
+                foreach (var shipmentLine in shipmentLines)
+                {
+                    if (!string.IsNullOrEmpty(shipmentLine.ItemReadableId) && !ItemExists(shipmentLine.ItemReadableId))
+                    {
+                        // Find corresponding sales order line to get description
+                        var salesOrderLine = salesOrderLines.FirstOrDefault(sol => sol.Id == shipmentLine.LineId);
+                        
+                        // Create the item in QuickBooks
+                        var item = new Item
+                        {
+                            ReadableId = shipmentLine.ItemReadableId,
+                            Description = salesOrderLine?.Description ?? shipmentLine.ItemReadableId
+                        };
+                        AddItem(item, salesAccountName, expenseAccountName);
+                    }
+                }
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                // Create invoice add request
+                var invoiceAdd = requestMsgSet.AppendInvoiceAddRq();
+
+                // Set customer reference using the provided QuickBooks customer name
+                invoiceAdd.CustomerRef.FullName.SetValue(customerName);
+
+                // Set transaction date to shipment date (using PostingDate instead of ShipmentDate)
+                invoiceAdd.TxnDate.SetValue(shipment.PostingDate ?? DateTime.Now);
+
+                // Set reference number (Shipment number)
+                invoiceAdd.RefNumber.SetValue(shipment.ShipmentId);
+
+                // Add memo with both SO and Shipment references
+                invoiceAdd.Memo.SetValue($"SO: {salesOrder.SalesOrderId}, Shipment: {shipment.ShipmentId}");
+
+                // Add lines based on shipment lines
+                foreach (var shipmentLine in shipmentLines)
+                {
+                    // Find corresponding sales order line
+                    var salesOrderLine = salesOrderLines.FirstOrDefault(sol => sol.Id == shipmentLine.LineId);
+                    if (salesOrderLine == null) continue;
+
+                    var invoiceLine = invoiceAdd.ORInvoiceLineAddList.Append();
+                    var invoiceLineAdd = invoiceLine.InvoiceLineAdd;
+
+                    // Set item reference if provided
+                    if (!string.IsNullOrEmpty(shipmentLine.ItemReadableId))
+                    {
+                        invoiceLineAdd.ItemRef.FullName.SetValue(shipmentLine.ItemReadableId);
+                    }
+
+                    // Set description
+                    invoiceLineAdd.Desc.SetValue(salesOrderLine.Description ?? shipmentLine.ItemReadableId ?? "");
+
+                    // Set quantity from shipment line (using ShippedQuantity instead of Quantity)
+                    invoiceLineAdd.Quantity.SetValue((double)shipmentLine.ShippedQuantity);
+
+                    // Set amount using sales order line price
+                    decimal lineAmount = shipmentLine.ShippedQuantity * (salesOrderLine.UnitPrice ?? 0m);
+                    invoiceLineAdd.Amount.SetValue((double)lineAmount);
+
+                    // // Only set tax code if tax percent is greater than 0 and we have a valid tax code
+                    // if (salesOrderLine.TaxPercent > 0)
+                    // {
+                    //     try
+                    //     {
+                    //         // First check if sales tax is enabled by attempting to query tax codes
+                    //         var taxRequestMsgSet = _sessionManager.CreateMsgSetRequest("US", 16, 0);
+                    //         var taxQuery = taxRequestMsgSet.AppendSalesTaxCodeQueryRq();
+                    //         var taxResponseMsgSet = _sessionManager.DoRequests(taxRequestMsgSet);
+                    //         var taxResponse = taxResponseMsgSet.ResponseList.GetAt(0);
+
+                    //         // Only set tax code if the query was successful
+                    //         if (taxResponse.StatusCode == 0 && taxResponse.Detail != null)
+                    //         {
+                    //             invoiceLineAdd.SalesTaxCodeRef.FullName.SetValue("Tax");
+                    //         }
+                    //     }
+                    //     catch
+                    //     {
+                    //         // If there's any error querying tax codes, skip setting the tax code
+                    //         // This handles cases where sales tax is disabled or not configured
+                    //     }
+                    // }
+                }
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add shipment invoice to QuickBooks: {response?.StatusMessage}");
+                }
+            }
+            catch (Exception)
+            {
+                CloseConnection();
                 throw;
             }
         }
@@ -691,7 +755,7 @@ namespace CarbonQuickBooks.Services
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
                 var customerQuery = requestMsgSet.AppendCustomerQueryRq();
-                customerQuery.ORCustomerListQuery.FullNameList.Add(customerName.ToUpper());
+                customerQuery.ORCustomerListQuery.FullNameList.Add(customerName);
 
                 var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
                 var response = responseMsgSet.ResponseList?.GetAt(0);
@@ -715,7 +779,7 @@ namespace CarbonQuickBooks.Services
                     ?? throw new InvalidOperationException("Failed to create request message set");
 
                 var vendorQuery = requestMsgSet.AppendVendorQueryRq();
-                vendorQuery.ORVendorListQuery.FullNameList.Add(vendorName.ToUpper());
+                vendorQuery.ORVendorListQuery.FullNameList.Add(vendorName);
 
                 var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
                 var response = responseMsgSet.ResponseList?.GetAt(0);
@@ -729,9 +793,44 @@ namespace CarbonQuickBooks.Services
             }
         }
 
-        public string GetQuickBooksName(string name)
+        public void AddItem(Item item, string salesAccountName, string expenseAccountName)
         {
-            return name.ToUpper();
+            try
+            {
+                EnsureValidConnection();
+
+                var requestMsgSet = _sessionManager?.CreateMsgSetRequest("US", 16, 0)
+                    ?? throw new InvalidOperationException("Failed to create request message set");
+
+                var itemAdd = requestMsgSet.AppendItemNonInventoryAddRq();
+
+                // Set required fields
+                itemAdd.Name.SetValue(item.ReadableId);
+
+                // Set optional fields
+                if (!string.IsNullOrEmpty(item.Description))
+                {
+                    itemAdd.ORSalesPurchase.SalesAndPurchase.SalesDesc.SetValue(item.Description);
+                    itemAdd.ORSalesPurchase.SalesAndPurchase.PurchaseDesc.SetValue(item.Description);
+                }
+
+                // Set account references from configuration
+                itemAdd.ORSalesPurchase.SalesAndPurchase.IncomeAccountRef.FullName.SetValue(salesAccountName);
+                itemAdd.ORSalesPurchase.SalesAndPurchase.ExpenseAccountRef.FullName.SetValue(expenseAccountName);
+
+                var responseMsgSet = _sessionManager.DoRequests(requestMsgSet);
+                var response = responseMsgSet.ResponseList?.GetAt(0);
+
+                if (response?.StatusCode != 0)
+                {
+                    throw new Exception($"Failed to add item to QuickBooks: {response?.StatusMessage}");
+                }
+            }
+            catch (Exception)
+            {
+                CloseConnection();
+                throw;
+            }
         }
 
         public void Dispose()

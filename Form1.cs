@@ -13,6 +13,7 @@ namespace CarbonQuickBooks
         private readonly Configuration _config = ConfigManager.OpenExeConfiguration(ConfigurationUserLevel.None);
         private QuickBooksService? _qbService;
         private CarbonService? _carbonService;
+        private System.Windows.Forms.Timer? _syncTimer;
 
         public async Task InitializeAsync()
         {
@@ -36,8 +37,62 @@ namespace CarbonQuickBooks
             txtSalesRevenueAccount.TextChanged += CarbonSettings_TextChanged;
             txtCompanyFile.TextChanged += CarbonSettings_TextChanged;
 
+            // Setup sync interval dropdown
+            cboSyncInterval.Items.AddRange(new string[] {
+                "Manual",
+                "Every 10 minutes",
+                "Every 30 minutes", 
+                "Every hour",
+                "Every 4 hours"
+            });
+            cboSyncInterval.SelectedIndex = 0;
+            cboSyncInterval.SelectedIndexChanged += CboSyncInterval_SelectedIndexChanged;
+
+            // Initialize timer
+            _syncTimer = new System.Windows.Forms.Timer();
+            _syncTimer.Tick += async (s, e) => await SyncInvoices();
+
             // Initial validation of settings
             ValidateSettings();
+        }
+
+        private void CboSyncInterval_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (_syncTimer == null) return;
+
+            // Stop existing timer
+            _syncTimer.Stop();
+
+            // Set new interval based on selection
+            switch (cboSyncInterval.SelectedIndex)
+            {
+                case 0: // Manual
+                    break;
+                case 1: // 10 minutes
+                    _syncTimer.Interval = 1 * 60 * 1000;
+                    _syncTimer.Start();
+                    break;
+                case 2: // 30 minutes
+                    _syncTimer.Interval = 30 * 60 * 1000;
+                    _syncTimer.Start();
+                    break;
+                case 3: // 1 hour
+                    _syncTimer.Interval = 60 * 60 * 1000;
+                    _syncTimer.Start();
+                    break;
+                case 4: // 4 hours
+                    _syncTimer.Interval = 4 * 60 * 60 * 1000;
+                    _syncTimer.Start();
+                    break;
+            }
+        }
+
+        private async Task SyncInvoices()
+        {
+            if (btnSyncInvoices.Enabled)
+            {
+                await BtnSyncInvoices_ClickAsync();
+            }
         }
 
         public Form1()
@@ -65,8 +120,8 @@ namespace CarbonQuickBooks
             {
                 var carbonConfig = new Dictionary<string, string?>
                 {
-                    { "Supabase:Url", txtApiUrl.Text },
-                    { "Supabase:Key", txtPublicKey.Text },
+                    { "Supabase:Url", txtApiUrl.Text ?? "https://sqojijiijknhbgyogmlu.supabase.co" },
+                    { "Supabase:Key", txtPublicKey.Text ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxb2ppamlpamtuaGJneW9nbWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2MDU0MzksImV4cCI6MjAzOTE4MTQzOX0.JMzLs9Y4Y4kQ-jhQHrSqgNyHSZgrkwzBd1PwPbVPtbQ"},
                     { "Supabase:ApiKey", txtApiKey.Text }
                 };
 
@@ -76,6 +131,7 @@ namespace CarbonQuickBooks
 
                 _carbonService = await CarbonService.CreateAsync(configuration);
                 WriteToContactsDebugConsole("Carbon service initialized successfully.");
+                WriteToInvoiceDebugConsole("Carbon service initialized successfully.");
             }
             catch (Exception ex)
             {
@@ -217,28 +273,72 @@ namespace CarbonQuickBooks
 
                 WriteToContactsDebugConsole("=== Starting QuickBooks Sync ===");
                 
-                // Get and display Carbon customers
+                // Get QuickBooks contacts
+                WriteToContactsDebugConsole("\n=== QuickBooks Data ===");
+                var quickbooksCustomers = _qbService?.GetCustomers() ?? new List<Contact>();
+                WriteToContactsDebugConsole($"\n--- QuickBooks Customers Found: {quickbooksCustomers.Count} ---");
+                foreach (var customer in quickbooksCustomers)
+                {
+                    WriteToContactsDebugConsole($"Customer: {customer.Name}");
+                }
+
+                var quickbooksVendors = _qbService?.GetVendors() ?? new List<Contact>();
+                WriteToContactsDebugConsole($"\n--- QuickBooks Vendors Found: {quickbooksVendors.Count} ---");
+                foreach (var vendor in quickbooksVendors)
+                {
+                    WriteToContactsDebugConsole($"Vendor: {vendor.Name}");
+                }
+
+                // Get Carbon contacts
                 WriteToContactsDebugConsole("\n=== Carbon Data ===");
                 if (_carbonService != null)
                 {
                     var carbonCustomers = await _carbonService.GetCustomers();
                     WriteToContactsDebugConsole($"\n--- Carbon Customers Found: {carbonCustomers.Count} ---");
-                    foreach (var customer in carbonCustomers)
+                    
+                    // Find customers that need to be synced
+                    var customersToSync = quickbooksCustomers.Where(qbCustomer => 
+                        !carbonCustomers.Any(cc => 
+                            cc.ExternalId != null && 
+                            cc.ExternalId.ContainsKey("quickbooks") && 
+                            cc.ExternalId["quickbooks"].ToString().ToLower() == qbCustomer.Name.ToLower()
+                        )).ToList();
+
+                    WriteToContactsDebugConsole($"\n--- Customers to Sync: {customersToSync.Count} ---");
+                    foreach (var customer in customersToSync)
                     {
-                        WriteToContactsDebugConsole($"Customer: {customer.Name}");
-                        WriteToContactsDebugConsole("  ---");
+                        WriteToContactsDebugConsole($"Adding customer: {customer.Name}");
+                        await _carbonService.InsertCustomer(customer);
                     }
 
                     var carbonSuppliers = await _carbonService.GetSuppliers();
                     WriteToContactsDebugConsole($"\n--- Carbon Suppliers Found: {carbonSuppliers.Count} ---");
-                    foreach (var supplier in carbonSuppliers)
+                    
+                    // Find vendors that need to be synced
+                    var vendorsToSync = quickbooksVendors.Where(qbVendor => 
+                        !carbonSuppliers.Any(cs => 
+                            cs.ExternalId != null && 
+                            cs.ExternalId.ContainsKey("quickbooks") && 
+                            cs.ExternalId["quickbooks"].ToString().ToLower() == qbVendor.Name.ToLower()
+                        )).ToList();
+
+                    WriteToContactsDebugConsole($"\n--- Vendors to Sync: {vendorsToSync.Count} ---");
+                    foreach (var vendor in vendorsToSync)
                     {
-                        WriteToContactsDebugConsole($"Supplier: {supplier.Name}");
-                        WriteToContactsDebugConsole("  ---");
+                        WriteToContactsDebugConsole($"Adding vendor: {vendor.Name}");
+                        await _carbonService.InsertSupplier(vendor);
                     }
+
+                    WriteToContactsDebugConsole($"\nSync Summary:");
+                    WriteToContactsDebugConsole($"- QuickBooks Customers: {quickbooksCustomers.Count}");
+                    WriteToContactsDebugConsole($"- QuickBooks Vendors: {quickbooksVendors.Count}");
+                    WriteToContactsDebugConsole($"- Carbon Customers: {carbonCustomers.Count}");
+                    WriteToContactsDebugConsole($"- Carbon Suppliers: {carbonSuppliers.Count}");
+                    WriteToContactsDebugConsole($"- Customers Added: {customersToSync.Count}");
+                    WriteToContactsDebugConsole($"- Vendors Added: {vendorsToSync.Count}");
                 }
 
-                WriteToContactsDebugConsole("=== Sync Complete ===\n");
+                WriteToContactsDebugConsole("\n=== Sync Complete ===\n");
             }
             catch (Exception ex)
             {
@@ -288,7 +388,7 @@ namespace CarbonQuickBooks
             }
         }
 
-        private async void BtnSyncInvoices_Click(object? sender, EventArgs e)
+        private async Task BtnSyncInvoices_ClickAsync()
         {
             try
             {
@@ -325,7 +425,7 @@ namespace CarbonQuickBooks
                     }
 
                     // Check if supplier exists in QuickBooks
-                    string quickbooksSupplierName = _qbService.GetQuickBooksName(supplier.Name);
+                    string quickbooksSupplierName = supplier.Name;
                     bool supplierExists = _qbService.VendorExists(quickbooksSupplierName);
 
                     if (!supplierExists)
@@ -365,15 +465,71 @@ namespace CarbonQuickBooks
                 WriteToInvoiceDebugConsole("\nFetching uninvoiced shipments...");
                 var uninvoicedShipments = await _carbonService.GetUninvoicedShipments();
                 WriteToInvoiceDebugConsole($"Found {uninvoicedShipments.Count} uninvoiced shipments");
-                
+
                 foreach (var shipment in uninvoicedShipments)
                 {
-                    WriteToInvoiceDebugConsole($"  Shipment ID: {shipment.Id}");
+                    WriteToInvoiceDebugConsole($"\nProcessing Shipment: {shipment.Id}");
+
+                    try {
+                        // Get shipment lines
+                        if(shipment.SourceDocument == "Sales Order") {
+                            var shipmentLines = await _carbonService.GetShipmentLines(shipment.Id);
+                            var salesOrder = await _carbonService.GetSalesOrderById(shipment.SourceDocumentId);
+                            if (salesOrder == null)
+                            {
+                                WriteToInvoiceDebugConsole($"Failed to find sales order {shipment.SourceDocumentId}");
+                                continue;
+                            }
+
+                            // Get customer details from Carbon
+                            var customer = await _carbonService.GetCustomerById(salesOrder.CustomerId);
+                            if (customer == null)
+                            {
+                                WriteToInvoiceDebugConsole($"Failed to find customer {salesOrder.CustomerId} in Carbon");
+                                continue;
+                            }
+
+                            // Check if customer exists in QuickBooks
+                            string quickbooksCustomerName = customer.Name;
+                            bool customerExists = _qbService.CustomerExists(quickbooksCustomerName);
+
+                            if (!customerExists)
+                            {
+                                WriteToInvoiceDebugConsole($"Creating customer {customer.Name} in QuickBooks...");
+                                var customerToAdd = new Contact
+                                {
+                                    Name = customer.Name,
+                                    Type = "Customer",
+                                    CompanyName = customer.Name
+                                    // Add other fields as needed
+                                };
+                                _qbService.AddContact(customerToAdd);
+                                
+                                // Update Carbon with QuickBooks external ID
+                                await _carbonService.UpdateCustomerExternalId(customer.Id, quickbooksCustomerName);
+                                WriteToInvoiceDebugConsole($"Customer {customer.Name} created in QuickBooks and updated in Carbon");
+                            }
+
+                            // Get sales order lines
+                            var salesOrderLines = await _carbonService.GetSalesOrderLines(salesOrder.Id);
+
+                            // Add shipment invoice to QuickBooks using the verified customer name
+                            _qbService.AddShipmentInvoiceFromSalesOrder(shipment, shipmentLines, salesOrder, salesOrderLines, quickbooksCustomerName, txtSalesRevenueAccount.Text, txtPurchaseAccount.Text);
+                            
+                            // Mark shipment as invoiced in Carbon
+                            await _carbonService.MarkShipmentAsInvoiced(shipment, shipmentLines, salesOrder, salesOrderLines);
+                            WriteToInvoiceDebugConsole($"Successfully created QB invoice for shipment {shipment.Id}");
+                        }
+                    }
+                    catch (Exception ex) {
+                        WriteToInvoiceDebugConsole($"Failed to create QB invoice for shipment {shipment.Id}: {ex.Message}");
+                        continue;
+                    }
                 }
 
                 WriteToInvoiceDebugConsole("\nSummary:");
                 WriteToInvoiceDebugConsole($"- Total Purchase Orders Processed: {uninvoicedPOs.Count}");
-                WriteToInvoiceDebugConsole($"- Total Shipments to Process: {uninvoicedShipments.Count}");
+                WriteToInvoiceDebugConsole($"- Total Shipments Processed: {uninvoicedShipments.Count}");
                 
                 WriteToInvoiceDebugConsole("\n=== Invoice Sync Process Complete ===");
             }
@@ -388,6 +544,11 @@ namespace CarbonQuickBooks
                 Cursor = Cursors.Default;
                 _qbService?.Dispose();
             }
+        }
+
+        private async void BtnSyncInvoices_Click(object? sender, EventArgs e)
+        {
+            await BtnSyncInvoices_ClickAsync();
         }
     }
 }
