@@ -18,7 +18,15 @@ x86/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
 bld/
-[Bb]in/
+[Bb]in/[Dd]ebug/
+[Bb]in/[Rr]elease/
+[Bb]in/[Xx]64/
+[Bb]in/[Xx]86/
+[Bb]in/[Ww]in32/
+[Bb]in/[Aa][Rr][Mm]/
+[Bb]in/[Aa][Rr][Mm]64/
+[Bb]in/[Aa][Rr][Mm]32/
+[Bb]in/[Aa][Rr][Mm]
 ![Bb]in/[Pp]ublish/
 [Oo]bj/
 [Ll]og/
