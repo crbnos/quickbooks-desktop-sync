@@ -9,8 +9,7 @@ It uses a 64-bit configuration
 
 ### Installing the package
 
-- Run the setup files in `bin/publish` to install the Application
-
+- Clone the repo and run the `setup.exe` in `bin/publish` to install the Application
 
 ### Running the application
 1. With the application installed and opened, navigate to the Settings tab
