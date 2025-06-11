@@ -69,7 +69,7 @@ namespace CarbonQuickBooks
                 case 0: // Manual
                     break;
                 case 1: // 10 minutes
-                    _syncTimer.Interval = 1 * 60 * 1000;
+                    _syncTimer.Interval = 10 * 60 * 1000;
                     _syncTimer.Start();
                     break;
                 case 2: // 30 minutes
@@ -120,8 +120,8 @@ namespace CarbonQuickBooks
             {
                 var carbonConfig = new Dictionary<string, string?>
                 {
-                    { "Supabase:Url", txtApiUrl.Text ?? "https://sqojijiijknhbgyogmlu.supabase.co" },
-                    { "Supabase:Key", txtPublicKey.Text ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxb2ppamlpamtuaGJneW9nbWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2MDU0MzksImV4cCI6MjAzOTE4MTQzOX0.JMzLs9Y4Y4kQ-jhQHrSqgNyHSZgrkwzBd1PwPbVPtbQ"},
+                    { "Supabase:Url", String.IsNullOrEmpty(txtApiUrl.Text) ? "https://sqojijiijknhbgyogmlu.supabase.co" : txtApiUrl.Text },
+                    { "Supabase:Key", String.IsNullOrEmpty(txtPublicKey.Text) ? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxb2ppamlpamtuaGJneW9nbWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2MDU0MzksImV4cCI6MjAzOTE4MTQzOX0.JMzLs9Y4Y4kQ-jhQHrSqgNyHSZgrkwzBd1PwPbVPtbQ" : txtPublicKey.Text },
                     { "Supabase:ApiKey", txtApiKey.Text }
                 };
 
@@ -153,9 +153,20 @@ namespace CarbonQuickBooks
         {
             try
             {
+                // Default values
+                const string defaultApiUrl = "https://sqojijiijknhbgyogmlu.supabase.co";
+                const string defaultPublicKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxb2ppamlpamtuaGJneW9nbWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjM2MDU0MzksImV4cCI6MjAzOTE4MTQzOX0.JMzLs9Y4Y4kQ-jhQHrSqgNyHSZgrkwzBd1PwPbVPtbQ";
+
                 txtCompanyFile.Text = _config.AppSettings.Settings["CompanyFile"]?.Value ?? string.Empty;
-                txtApiUrl.Text = _config.AppSettings.Settings["ApiUrl"]?.Value ?? string.Empty;
-                txtPublicKey.Text = _config.AppSettings.Settings["PublicKey"]?.Value ?? string.Empty;
+                
+                // Set API URL with default if null or empty
+                var apiUrl = _config.AppSettings.Settings["ApiUrl"]?.Value;
+                txtApiUrl.Text = string.IsNullOrEmpty(apiUrl) ? defaultApiUrl : apiUrl;
+                
+                // Set Public Key with default if null or empty
+                var publicKey = _config.AppSettings.Settings["PublicKey"]?.Value;
+                txtPublicKey.Text = string.IsNullOrEmpty(publicKey) ? defaultPublicKey : publicKey;
+                
                 txtApiKey.Text = _config.AppSettings.Settings["ApiKey"]?.Value ?? string.Empty;
                 txtPurchaseAccount.Text = _config.AppSettings.Settings["PurchaseAccount"]?.Value ?? string.Empty;
                 txtSalesRevenueAccount.Text = _config.AppSettings.Settings["SalesRevenueAccount"]?.Value ?? string.Empty;
