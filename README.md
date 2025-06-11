@@ -1,5 +1,8 @@
 # Carbon QuickBooks Desktop Sync
 
+![Carbon QuickBooks Sync](https://github.com/user-attachments/assets/f4d26c1d-6844-4de7-b767-84819967c661)
+
+
 This is a WinForms app that syncs data between Carbon and QuickBooks Desktop
 
 - Contacts are synced from QuickBooks to Carbon
