@@ -197,7 +197,7 @@ namespace CarbonQuickBooks
                 await InitializeCarbonServiceAsync().ConfigureAwait(false);
                 if (_carbonService != null)
                 {
-                    _carbonService.UpdateConfiguration();
+                    await _carbonService.UpdateConfiguration();
                 }
 
                 MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -312,7 +312,7 @@ namespace CarbonQuickBooks
                         !carbonCustomers.Any(cc => 
                             cc.ExternalId != null && 
                             cc.ExternalId.ContainsKey("quickbooks") && 
-                            cc.ExternalId["quickbooks"].ToString().ToLower() == qbCustomer.Name.ToLower()
+                            cc.ExternalId["quickbooks"]?.ToString().ToLower() == qbCustomer.Name?.ToLower()
                         )).ToList();
 
                     WriteToContactsDebugConsole($"\n--- Customers to Sync: {customersToSync.Count} ---");
@@ -330,7 +330,7 @@ namespace CarbonQuickBooks
                         !carbonSuppliers.Any(cs => 
                             cs.ExternalId != null && 
                             cs.ExternalId.ContainsKey("quickbooks") && 
-                            cs.ExternalId["quickbooks"].ToString().ToLower() == qbVendor.Name.ToLower()
+                            cs.ExternalId["quickbooks"]?.ToString().ToLower() == qbVendor.Name?.ToLower()
                         )).ToList();
 
                     WriteToContactsDebugConsole($"\n--- Vendors to Sync: {vendorsToSync.Count} ---");
@@ -363,7 +363,7 @@ namespace CarbonQuickBooks
             }
         }
 
-        private void BtnBrowseCompanyFile_Click(object? sender, EventArgs e)
+        private async void BtnBrowseCompanyFile_Click(object? sender, EventArgs e)
         {
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
             {
@@ -373,7 +373,7 @@ namespace CarbonQuickBooks
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     txtCompanyFile.Text = openFileDialog.FileName;
-                    SaveSettings(); // Save settings when company file is selected
+                    await SaveSettings(); // Save settings when company file is selected
                 }
             }
         }
@@ -483,7 +483,7 @@ namespace CarbonQuickBooks
 
                     try {
                         // Get shipment lines
-                        if(shipment.SourceDocument == "Sales Order") {
+                        if(shipment.SourceDocument == "Sales Order" && !string.IsNullOrEmpty(shipment.SourceDocumentId)) {
                             var shipmentLines = await _carbonService.GetShipmentLines(shipment.Id);
                             var salesOrder = await _carbonService.GetSalesOrderById(shipment.SourceDocumentId);
                             if (salesOrder == null)

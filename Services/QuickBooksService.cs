@@ -414,7 +414,9 @@ namespace CarbonQuickBooks.Services
                         var item = new Item
                         {
                             ReadableId = shipmentLine.ItemReadableId,
-                            Description = salesOrderLine?.Description ?? shipmentLine.ItemReadableId
+                            Description = salesOrderLine?.Description ?? shipmentLine.ItemReadableId,
+                            ItemTrackingType = "None",
+                            CreatedBy = "System"
                         };
                         AddItem(item, salesAccountName, expenseAccountName);
                     }

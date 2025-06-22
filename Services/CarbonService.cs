@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System;
 using CarbonQuickBooks.Models;
 using System.Linq;
+using Supabase.Postgrest.Exceptions;
 
 namespace CarbonQuickBooks.Services
 {
@@ -61,8 +62,11 @@ namespace CarbonQuickBooks.Services
         private async Task InitializeClientAsync()
         {
             _client = await CreateClient();
-            var company = await _client.From<Company>().Select("id").Single();
-            _companyId = company.Id;
+            if (_client != null)
+            {
+                var company = await _client.From<Company>().Select("id").Single();
+                _companyId = company.Id;
+            }
         }
 
         public async Task<List<Customer>> GetCustomers()
@@ -153,7 +157,8 @@ namespace CarbonQuickBooks.Services
 
                 // Get quantities by line
                 var quantitiesByLine = shipmentLines
-                    .GroupBy(l => l.LineId)
+                    .Where(l => !string.IsNullOrEmpty(l.LineId))
+                    .GroupBy(l => l.LineId!)
                     .ToDictionary(
                         g => g.Key,
                         g => g.Sum(l => l.ShippedQuantity)
@@ -238,7 +243,6 @@ namespace CarbonQuickBooks.Services
                     Name = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name,
                     CompanyId = _companyId,
                     ExternalId = new Dictionary<string, object>
-
                     {
                         { "quickbooks", contact.Name }
                     }
@@ -248,8 +252,16 @@ namespace CarbonQuickBooks.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error inserting customer: {ex}");
-                throw;
+                if(ex.Message.Contains("unique"))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Customer already exists: {ex}");
+                    var customerName = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name;
+                    await _client.From<Customer>().Where(x => x.Name == customerName).Set(x => x.ExternalId, new Dictionary<string, object> { { "quickbooks", contact.Name } }).Update();
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error inserting customer: {ex}");
+                }
             }
         }
 
@@ -273,8 +285,16 @@ namespace CarbonQuickBooks.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error inserting supplier: {ex}");
-                throw;
+                if(ex.Message.Contains("unique"))
+                {
+                    System.Diagnostics.Debug.WriteLine($"Supplier already exists: {ex}");
+                    var supplierName = !string.IsNullOrEmpty(contact.CompanyName) ? contact.CompanyName : contact.Name;
+                    await _client.From<Supplier>().Where(x => x.Name == supplierName).Set(x => x.ExternalId, new Dictionary<string, object> { { "quickbooks", contact.Name } }).Update();
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error inserting supplier: {ex}");
+                }
             }
         }
 

@@ -28,7 +28,7 @@ public class Item : BaseModel
     public string? DefaultMethodType { get; set; } = "Buy";
 
     [Column("itemTrackingType")]
-    public string ItemTrackingType { get; set; }
+    public required string ItemTrackingType { get; set; }
 
     [Column("unitOfMeasureCode")]
     public string? UnitOfMeasureCode { get; set; }
@@ -40,7 +40,7 @@ public class Item : BaseModel
     public string? CompanyId { get; set; }
 
     [Column("createdBy")]
-    public string CreatedBy { get; set; }
+    public required string CreatedBy { get; set; }
 
     [Column("createdAt")]
     public DateTime CreatedAt { get; set; }
